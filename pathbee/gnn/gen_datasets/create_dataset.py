@@ -4,15 +4,18 @@ import numpy as np
 import time
 import glob
 import random
+import os
 random.seed(10)
 
 def reorder_list(input_list,serial_list):
     new_list_tmp = [input_list[j] for j in serial_list]
     return new_list_tmp
 
-def create_dataset(list_data,num_copies):
+def printtest():
+    print(1)
 
-    adj_size = 4500000
+def create_dataset(list_data,num_copies, adj_size):
+
     num_data = len(list_data)
     total_num = num_data*num_copies
     cent_mat = np.zeros((adj_size,total_num), dtype=np.float64)
@@ -61,42 +64,39 @@ def get_split(source_file,num_train,num_test,num_copies,adj_size,save_path):
     assert num_train+num_test == num_graph,"Required split size doesn't match number of graphs in pickle file."
     
     #For training split
-    list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(list_data[:num_train],num_copies = num_copies)
-
-    with open(save_path+"training.pickle","wb") as fopen:
+    list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(list_data[:num_train],num_copies, adj_size)
+    # print(save_path+"_test.pickle","wb")
+    with open(os.path.join(save_path,"training.pickle"),"wb") as fopen:
         pickle.dump([list_graph,list_n_sequence,list_node_num,cent_mat],fopen, protocol=4)
 
     #For test split
-    list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(list_data[num_train:num_train+num_test], num_copies = 50)
+    list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(list_data[num_train:num_train+num_test], num_copies, adj_size)
 
-    with open(save_path+"test.pickle","wb") as fopen:
+    with open(os.path.join(save_path,"test.pickle"),"wb") as fopen:
         pickle.dump([list_graph,list_n_sequence,list_node_num,cent_mat],fopen, protocol=4)
 
 #creating training/test dataset split for the model
-adj_size = 4500000
-graph_types = ["SF"]
-num_train = 4
-num_test = 1
+# adj_size = 4500000
+# graph_type = "SF"
+# num_train = 4
+# num_test = 1
 
-#Number of permutations for node sequence
-#Can be raised higher to get more training graphs
-#num_copies = 2
-num_copies = 50
+# #Number of permutations for node sequence
+# num_copies = 50
 
-#Total number of training graphs = 40*6 = 240
+# #Total number of training graphs = 5*50 = 250
 
-for g_type in graph_types:
-    print("Loading graphs from pickle files...")
-    bet_source_file = "./graphs/"+ g_type + "_data_bet.pickle"
-    # close_source_file = "./graphs/"+ g_type + "_data_close.pickle"
+# print("Loading graphs from pickle files...")
+# # TODO : relative path
+# bet_source_file = "./graphs/synthetic/"+ graph_type + "_data_bet.pickle"
 
-    #paths for saving splits
-    save_path_bet = "./data_splits/"+g_type+"/betweenness/"
-    # save_path_close = "./data_splits/"+g_type+"/closeness/"
+# #paths for saving splits
+# save_path_bet = "./graphs/synthetic/"+graph_type
 
-    #save betweenness split
-    get_split(bet_source_file,num_train,num_test,num_copies,adj_size,save_path_bet)
 
-    #save closeness split
-    # get_split(close_source_file,num_train,num_test,num_copies,adj_size,save_path_close)
-    print(" Data split saved.")
+# #save betweenness split
+# get_split(bet_source_file,num_train,num_test,num_copies,adj_size,save_path_bet)
+
+# #save closeness split
+# # get_split(close_source_file,num_train,num_test,num_copies,adj_size,save_path_close)
+# print(" Data split saved.")

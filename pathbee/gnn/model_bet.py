@@ -1,8 +1,8 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from layer import GNN_Layer
-from layer import GNN_Layer_Init
-from layer import MLP
+from .layer import GNN_Layer
+from .layer import GNN_Layer_Init
+from .layer import MLP
 import torch 
 
 
