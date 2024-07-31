@@ -8,40 +8,8 @@ from .utils import *
 import time
 import os
 
-# def create_dataset(graphs, num_copies):
 
-#     adj_size = 4500000
-#     num_data = len(graphs)
-#     total_num = num_data * num_copies
-#     cent_mat = np.zeros((adj_size,total_num), dtype=float)
-#     list_graph = list()
-#     list_node_num = list()
-#     list_n_sequence = list()
-#     mat_index = 0
-#     for g_data in graphs:
-
-#         graph, cent_dict = g_data
-#         nodelist = [i for i in graph.nodes()]
-#         assert len(nodelist)==len(cent_dict), "Number of nodes are not equal"
-#         node_num = len(nodelist)
-
-#         for i in range(num_copies):
-#             tmp_nodelist = list(nodelist)
-#             list_graph.append(graph)
-#             list_node_num.append(node_num)
-#             list_n_sequence.append(tmp_nodelist)
-
-#             for ind,node in enumerate(tmp_nodelist):
-#                 cent_mat[ind,mat_index] = cent_dict[node]
-#             mat_index +=  1
-
-#     serial_list = [i for i in range(total_num)]
-#     cent_mat_tmp = cent_mat[:, np.array(serial_list)]
-#     cent_mat = cent_mat_tmp
-
-#     return list_graph, list_n_sequence, list_node_num, cent_mat
-
-def ranking_correlation(y_out, true_val, node_num, model_size, map_name):
+def ranking_correlation(y_out, true_val, node_num, model_size):
     y_out = y_out.reshape((model_size))
     true_val = true_val.reshape((model_size))
 
@@ -51,11 +19,9 @@ def ranking_correlation(y_out, true_val, node_num, model_size, map_name):
     true_arr = true_arr[:node_num]
     order_result = np.argsort(predict_arr)[::-1]
 
-    kt, _ = kendalltau(predict_arr[:node_num], true_arr[:node_num])
+    return order_result, predict_arr[:node_num]
 
-    return kt, order_result, predict_arr[:node_num]
-
-def inference(model, list_adj_test, list_adj_t_test, list_num_node_test, bc_mat_test, model_size, device, map_names):
+def inference(model, list_adj_test, list_adj_t_test, list_num_node_test, bc_mat_test, model_size, device):
     model.eval()
     num_samples_test = len(list_adj_test)
     orders = []
@@ -72,7 +38,7 @@ def inference(model, list_adj_test, list_adj_t_test, list_num_node_test, bc_mat_
         true_arr = torch.from_numpy(bc_mat_test[:,j]).float()
         true_val = true_arr.to(device)
 
-        kt, order, pred_arr = ranking_correlation(y_out, true_val, num_nodes, model_size, map_names[j])
+        order, pred_arr = ranking_correlation(y_out, true_val, num_nodes, model_size)
 
         orders.append(order)
         pre_arrs.append(pred_arr)

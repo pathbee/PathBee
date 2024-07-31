@@ -10,7 +10,11 @@ import random
 import numpy as np
 import torch
 import os
-
+# util.py  
+from multiprocessing import Process, Queue  
+import queue  
+import os  
+from typing import List
 
 def get_out_edges(g_nkit,node_sequence):
     global all_out_dict
@@ -43,27 +47,24 @@ def nkit_outedges(u,v,weight,edgeid):
     all_out_dict[u].add(v)
 
   
-def concat_path_and_get_filename(*args):  
+def concat_path(*args):  
     """  
-    Concatenates arbitrary number of path segments and returns the full path and filename without extension.  
+    Concatenates arbitrary number of path segments and returns the full path.  
       
     Parameters:  
     *args: Arbitrary number of path segments  
-  
-    Returns:  
-    Tuple containing the full path and filename without extension.  
     """  
     # Concatenate the path segments  
-    full_path = os.path.join(*args)  
-      
-    # Get the base name (file name with extension)  
-    base_name = os.path.basename(full_path)  
-      
-    # Remove the extension from the file name  
-    filename_without_ext = os.path.splitext(base_name)[0]  
-      
-    return full_path, filename_without_ext  
+    return os.path.join(*args)  
 
+def get_file_without_extension_name(full_path):
+
+    base_name = os.path.basename(full_path)  
+    # Remove the extension from the file name  
+    filename_without_ext = os.path.splitext(base_name)[0]
+
+    return filename_without_ext
+  
 def nx2nkit(g_nx):
     
     node_num = g_nx.number_of_nodes()
@@ -79,6 +80,43 @@ def nx2nkit(g_nx):
     assert g_nx.number_of_edges()==g_nkit.numberOfEdges(),"Number of edges not matching"
         
     return g_nkit
+
+
+def execute_command(cmd: str) -> None:  
+    """  
+    Execute a shell command.  
+    """  
+    # If the command is None, just return  
+    if cmd is None:  
+        return  
+    print(f"running {cmd}...")
+    os.system(cmd)  
+  
+def parallel_process(commands: List[str], num_processes: int) -> None:  
+    """  
+    Execute shell commands in parallel.  
+  
+    commands: List of shell commands.  
+    num_processes: Number of processes to start.  
+    """  
+    # Create a queue to hold the commands  
+    command_queue = Queue()  
+    for cmd in commands:  
+        command_queue.put(cmd)  
+  
+    # Add "stop" signals to the queue  
+    for _ in range(num_processes):  
+        command_queue.put(None)  
+  
+    # Create and start initial processes  
+    processes = [Process(target=execute_command, args=(command_queue.get(),)) for _ in range(num_processes)]  
+    for p in processes:  
+        p.start()  
+  
+    # Wait for all processes to finish  
+    for p in processes:  
+        p.join()  
+
 
 def read_graph(map_path):
     import networkx as nx

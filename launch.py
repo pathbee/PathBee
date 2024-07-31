@@ -106,9 +106,8 @@ def train_gnn(
             loss_epoch = test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test, model, optimizer)
             if loss_epoch < loss:
                 loss = loss_epoch 
-        
-            # save the model
-            torch.save(model, model_path)
+                torch.save(model, model_path)
+                print(f"save the {e+1} epoch model to {model_path}...")
 
 
 
@@ -123,25 +122,25 @@ def inference_gnn_based_centrality(
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)    
     for graph_name in graph_names:
-        graph_path, _ = concat_path_and_get_filename(graph_folder, graph_name)
+        graph_path = concat_path(graph_folder, graph_name)
         graph = preprocess(graph_path)
 
         
         start = time.perf_counter()
         model = torch.load(model_path)
-        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(graph, num_copies = 1, adj_size= adj_size)
+        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset([graph], num_copies = 1, adj_size= adj_size)
         list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
         end = time.perf_counter()
         print(f'The time of load model is {end-start}s')
 
 
         start = time.perf_counter()
-        _, pre_arrs = inference(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device, graph_paths)
+        _, pre_arrs = inference(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device)
         end = time.perf_counter()
         print(f'The time of cal centrality is {end-start}s\n\n')
 
-        dest_value_path = os.path.join(centrality_folder, os.path.basename(model_path)[:-3], os.path.basename(graph_paths[0])[:-4] + "_value.txt")
-        dest_ranking_path = os.path.join(centrality_folder, os.path.basename(model_path)[:-3], os.path.basename(graph_paths[0])[:-4] + "_ranking.txt")
+        dest_value_path = concat_path(centrality_folder, get_file_without_extension_name(model_path), get_file_without_extension_name(graph_name) + "_value.txt")
+        dest_ranking_path = concat_path(centrality_folder, get_file_without_extension_name(model_path), get_file_without_extension_name(graph_name) + "_ranking.txt")
 
         dest_dir = os.path.dirname(dest_value_path)
         if not os.path.exists(dest_dir):
@@ -161,9 +160,10 @@ def inference_gnn_based_centrality(
             for index_centrality_pair in centrality_rankings:
                 f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
-def run_2_hop_labeling(  
-        graph_paths: Union[str, List[str]] = "datasets/graphs/real_world/GN.txt",  
-        centrality_path: str = "datasets/centralities/gnn/MRL_6layer_/GN_ranking.txt",  
+def run_2_hop_labeling(
+        graph_folder: str = "datasets/graphs/real_world",
+        graph_names: Union[str, List[str]] = "GN.txt",  
+        centrality_folder: str = "datasets/centralities/gnn/sum_aggre",  
         algorithm_path: str = "pathbee/algorithms/2_hop_labeling.cpp",  
         num_processes: int = 1  
 ) -> None:  
@@ -177,18 +177,20 @@ def run_2_hop_labeling(
     """  
     # Compile the algorithm  
     os.system(f"g++ {algorithm_path} -o 2_hop_labeling")  
-  
-    if isinstance(graph_paths, str):  
-        os.system(f"./2_hop_labeling {graph_paths} {centrality_path} ")  
-        print(os.path.basename(graph_paths))  
-    elif isinstance(graph_paths, list):  
-        pass  
+    
+    if isinstance(graph_names, str):  
+        graph_name = graph_names
+        cmd = f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, get_file_without_extension_name(graph_name)+ '_ranking.txt')}"  
+        execute_command(cmd)
+    elif isinstance(graph_names, list):  
+        commands = [f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, get_file_without_extension_name(graph_name)+'_ranking.txt')}" for graph_name in graph_names]  
+        parallel_process(commands, num_processes)  
 
 command_map = {
     "gen": gen_dataset,
     "train": train_gnn,
     "infer": inference_gnn_based_centrality,
-    "pll": run_2_hop_labeling,
+    "indexing": run_2_hop_labeling,
 }
 
 def main(command: str = "pll", *args, **kwargs):

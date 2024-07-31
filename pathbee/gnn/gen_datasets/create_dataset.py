@@ -11,11 +11,7 @@ def reorder_list(input_list,serial_list):
     new_list_tmp = [input_list[j] for j in serial_list]
     return new_list_tmp
 
-def printtest():
-    print(1)
-
 def create_dataset(list_data,num_copies, adj_size):
-
     num_data = len(list_data)
     total_num = num_data*num_copies
     cent_mat = np.zeros((adj_size,total_num), dtype=np.float64)
@@ -24,7 +20,6 @@ def create_dataset(list_data,num_copies, adj_size):
     list_n_sequence = list()
     mat_index = 0
     for g_data in list_data:
-
         graph, cent_dict = g_data
         nodelist = [i for i in graph.nodes()]
         assert len(nodelist)==len(cent_dict),"Number of nodes are not equal"
