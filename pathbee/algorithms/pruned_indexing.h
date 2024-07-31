@@ -631,11 +631,11 @@ template<int kNumBitParallelRoots>
 std::string PrunedLandmarkLabeling<kNumBitParallelRoots>
 ::Statistics() {
   std::string stats;
-  stats += " index building time:" + std::to_string(time_indexing_) + "s\n";
-  stats += " search space:" + std::to_string(search_space) + "\n";
+  stats += "index building time:" + std::to_string(time_indexing_) + "s,";
+  // stats += " search space:" + std::to_string(search_space) + "\n";
   size_t memory_consumption_byte = spt_d_memory + spt_v_memory;
   double memory_consumption_MB = static_cast<double>(memory_consumption_byte) / (1024*1024); 
-  stats += " index size:" + std::to_string(memory_consumption_MB) + "MB\n";
+  stats += " index size:" + std::to_string(memory_consumption_MB) + "MB";
   return stats;
 }
 

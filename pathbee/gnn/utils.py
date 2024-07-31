@@ -3,18 +3,14 @@ import networkx as nx
 from scipy.linalg import block_diag
 from scipy.sparse import csr_matrix
 from scipy.stats import kendalltau
-import pickle
 import scipy.sparse as sp
-import copy
-import random
 import numpy as np
 import torch
 import os
-# util.py  
 from multiprocessing import Process, Queue  
-import queue  
 import os  
 from typing import List
+import logging
 
 def get_out_edges(g_nkit,node_sequence):
     global all_out_dict
@@ -85,12 +81,18 @@ def nx2nkit(g_nx):
 def execute_command(cmd: str) -> None:  
     """  
     Execute a shell command.  
-    """  
+    """
+    import subprocess   
     # If the command is None, just return  
+    logger = get_logger()
     if cmd is None:  
-        return  
-    print(f"running {cmd}...")
-    os.system(cmd)  
+        return 
+        # raise ValueError("the command must not be None")
+    logger.info(f"start running {cmd}...")
+    result = subprocess.run(cmd, shell=True, text=True, capture_output=True)   
+    logger.info(result.stdout) 
+    logger.info(f"finish running {cmd}...\n")  
+
   
 def parallel_process(commands: List[str], num_processes: int) -> None:  
     """  
@@ -258,6 +260,44 @@ def graph_to_adj_bet(list_graph,list_n_sequence,list_node_num,model_size):
         list_adjacency_t.append(adj_mat_t)
     print("", flush=True)          
     return list_adjacency,list_adjacency_t
+
+
+def get_logger(name: str = "pathbee", level: str = 'INFO', filename: str = 'pathbee.log') -> logging.Logger:  
+    """   
+    Create and return a logger with the specified name and level.  
+  
+    Args:  
+        name (str): Name of the logger.  
+        level (str): Logging level, default is 'INFO'.  
+        filename (str): Name of the log file, default is 'app.log'.  
+  
+    Returns:  
+        logging.Logger: A logger instance.  
+    """  
+    logger = logging.getLogger(name)  
+    logger.setLevel(level)  
+  
+    # Only add handlers if the logger doesn't have any  
+    if not logger.handlers:  
+        # Create a file handler and a console handler  
+        fh = logging.FileHandler(filename)  
+        ch = logging.StreamHandler()  
+  
+        # Set the level for both handlers  
+        fh.setLevel(level)  
+        ch.setLevel(level)  
+  
+        # Create a formatter and add it to the handlers  
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')  
+        fh.setFormatter(formatter)  
+        ch.setFormatter(formatter)  
+  
+        # Add the handlers to the logger  
+        logger.addHandler(fh)  
+        logger.addHandler(ch)  
+  
+    return logger  
+
 
 def graph_to_adj_close(list_graph,list_n_sequence,list_node_num,model_size,print_time=False):
     

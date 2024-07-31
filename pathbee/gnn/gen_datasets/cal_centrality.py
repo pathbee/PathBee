@@ -114,8 +114,8 @@ centrality_dict = {
 }
 
         
-graph_folder = "graphs/real_world"
-centrality_folder = 'centralities'
+graph_folder = "/realgraphs_world"
+centrality_folder = 'datasets/centralities'
 centrality_type = args.centrality
 
 if __name__ == "__main__":  

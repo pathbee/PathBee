@@ -2,8 +2,11 @@ from pathbee.gnn.gen_datasets.create_dataset import *
 from pathbee.gnn.gen_datasets.generate_graph import *
 from pathbee.gnn.betweenness import *
 from pathbee.gnn.predict import *
+
 import fire
 from typing import List, Union
+
+logger = get_logger()
 
 def gen_dataset(
         num_of_graphs: int = 5,
@@ -175,8 +178,11 @@ def run_2_hop_labeling(
     algorithm_path: Path to 2-hop labeling algorithm.  
     num_processes: (Optional) Number of processes to start. Default is 1.  
     """  
+    params = locals()
+    for param_name, param_value in params.items():  
+        logger.info(f"{param_name}: {param_value}")  
     # Compile the algorithm  
-    os.system(f"g++ {algorithm_path} -o 2_hop_labeling")  
+    execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")  
     
     if isinstance(graph_names, str):  
         graph_name = graph_names
@@ -194,8 +200,9 @@ command_map = {
 }
 
 def main(command: str = "pll", *args, **kwargs):
-    # print(command)
     command_map[command](*args, **kwargs)
 
 if __name__ == "__main__":
+    logger.info("START EXECUTE CODE************************")
     fire.Fire(main)
+    logger.info("FINISH EXECUTE CODE************************\n\n\n")
