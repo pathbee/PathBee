@@ -3,7 +3,7 @@ from pathbee.gnn.gen_datasets.generate_graph import *
 from pathbee.gnn.betweenness import *
 from pathbee.gnn.predict import *
 import fire
-from typing import List
+from typing import List, Union
 
 def gen_dataset(
         num_of_graphs: int = 5,
@@ -46,7 +46,7 @@ def train_gnn(
         num_graph: int = 5,
         hidden: int = 12,
         num_epoch: int = 10,
-        model_path: str = ""
+        model_path: str = "models/model.pt"
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device, flush=True)
@@ -96,87 +96,102 @@ def train_gnn(
     model = GNN_Bet(ninput=adj_size, nhid=hidden, dropout=0.6)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
-
+    loss = 9999999
     for e in range(num_epoch):
         print(f"Epoch number: {e+1}/{num_epoch}", flush=True)
         train(device, adj_size, list_adj_train,list_adj_t_train,list_num_node_train,bc_mat_train, model, optimizer)
 
         #to check test loss while training
         with torch.no_grad():
-            test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test, model, optimizer)
+            loss_epoch = test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test, model, optimizer)
+            if loss_epoch < loss:
+                loss = loss_epoch 
+        
+            # save the model
+            torch.save(model, model_path)
 
-        # save the model
-        torch.save(model, f"models/MRL_6layer_{e+1}.pt")
 
-    #test on 10 test graphs and print average KT Score and its stanard deviation
-    with torch.no_grad():
-        test(list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test)
 
 def inference_gnn_based_centrality(
-        graph_paths: List[str] = ["datasets/graphs/real_world/GN.txt"],
+        graph_folder: str = "datasets/graphs/real_world",
+        graph_names: List[str] = ["GN.txt"],
         centrality_folder: str = "datasets/centralities/gnn",
         model_path: str = "models/MRL_6layer_1.pt",
         adj_size: int = 100000
 ):
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)        
-    graphs = preprocess(graph_paths)
+    print(device)    
+    for graph_name in graph_names:
+        graph_path, _ = concat_path_and_get_filename(graph_folder, graph_name)
+        graph = preprocess(graph_path)
 
-    
-    start = time.perf_counter()
-    model = torch.load(model_path)
-    print(model, flush=True)
-    list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(graphs, num_copies = 1, adj_size= adj_size)
-    list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
-    end = time.perf_counter()
-    print(f'The time of load model is {end-start}s')
+        
+        start = time.perf_counter()
+        model = torch.load(model_path)
+        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset(graph, num_copies = 1, adj_size= adj_size)
+        list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
+        end = time.perf_counter()
+        print(f'The time of load model is {end-start}s')
 
 
-    start = time.perf_counter()
-    orders, pre_arrs = test(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device, graph_paths)
-    end = time.perf_counter()
-    print(f'The time of cal centrality is {end-start}s\n\n')
+        start = time.perf_counter()
+        _, pre_arrs = inference(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device, graph_paths)
+        end = time.perf_counter()
+        print(f'The time of cal centrality is {end-start}s\n\n')
 
-    dest_value_path = os.path.join(centrality_folder, os.path.basename(model_path)[:-4], os.path.basename(graph_paths[0])[:-4] + "_value.txt")
-    dest_ranking_path = os.path.join(centrality_folder, os.path.basename(model_path)[:-4], os.path.basename(graph_paths[0])[:-4] + "_ranking.txt")
+        dest_value_path = os.path.join(centrality_folder, os.path.basename(model_path)[:-3], os.path.basename(graph_paths[0])[:-4] + "_value.txt")
+        dest_ranking_path = os.path.join(centrality_folder, os.path.basename(model_path)[:-3], os.path.basename(graph_paths[0])[:-4] + "_ranking.txt")
 
-    dest_dir = os.path.dirname(dest_value_path)
-    if not os.path.exists(dest_dir):
-        os.makedirs(dest_dir)
+        dest_dir = os.path.dirname(dest_value_path)
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
 
-    centrality_values = []
-    centrality_rankings = []
-    for index, item  in enumerate(pre_arrs[0]):
-        centrality_values.append((index,item))
-    centrality_rankings = (sorted(dict(centrality_values).items(), key=lambda item: item[1],reverse=True))
+        centrality_values = []
+        centrality_rankings = []
+        for index, item  in enumerate(pre_arrs[0]):
+            centrality_values.append((index,item))
+        centrality_rankings = (sorted(dict(centrality_values).items(), key=lambda item: item[1],reverse=True))
 
-    with open(dest_value_path, 'w') as f:
-        for index_centrality_pair in centrality_values:
-            f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
+        with open(dest_value_path, 'w') as f:
+            for index_centrality_pair in centrality_values:
+                f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
-    with open(dest_ranking_path, 'w') as f:
-        for index_centrality_pair in centrality_rankings:
-            f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
+        with open(dest_ranking_path, 'w') as f:
+            for index_centrality_pair in centrality_rankings:
+                f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
-def run_2_hop_labeling(
-        graph_path: str = "datasets/graphs/real_world/GN.txt",
-        centrality_path: str = "datasets/centralities/gnn/MRL_6layer_/GN_ranking.txt",
-):
-    os.system(f"g++ pathbee/algorithms/2_hop_labeling.cpp -o 2_hop_labeling")
-    os.system(f"./2_hop_labeling {graph_path} {centrality_path} ")
-def end2end():
-   pass
+def run_2_hop_labeling(  
+        graph_paths: Union[str, List[str]] = "datasets/graphs/real_world/GN.txt",  
+        centrality_path: str = "datasets/centralities/gnn/MRL_6layer_/GN_ranking.txt",  
+        algorithm_path: str = "pathbee/algorithms/2_hop_labeling.cpp",  
+        num_processes: int = 1  
+) -> None:  
+    """  
+    Run 2-hop labeling algorithm.  
+  
+    graph_paths: Path(s) to graph file(s).  
+    centrality_path: Path to centrality file.  
+    algorithm_path: Path to 2-hop labeling algorithm.  
+    num_processes: (Optional) Number of processes to start. Default is 1.  
+    """  
+    # Compile the algorithm  
+    os.system(f"g++ {algorithm_path} -o 2_hop_labeling")  
+  
+    if isinstance(graph_paths, str):  
+        os.system(f"./2_hop_labeling {graph_paths} {centrality_path} ")  
+        print(os.path.basename(graph_paths))  
+    elif isinstance(graph_paths, list):  
+        pass  
 
 command_map = {
     "gen": gen_dataset,
     "train": train_gnn,
     "infer": inference_gnn_based_centrality,
     "pll": run_2_hop_labeling,
-    "end2end": end2end,  
 }
 
-def main(command: str = "end2end", *args, **kwargs):
+def main(command: str = "pll", *args, **kwargs):
     # print(command)
     command_map[command](*args, **kwargs)
 

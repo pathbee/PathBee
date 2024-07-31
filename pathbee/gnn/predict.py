@@ -55,7 +55,7 @@ def ranking_correlation(y_out, true_val, node_num, model_size, map_name):
 
     return kt, order_result, predict_arr[:node_num]
 
-def test(model, list_adj_test, list_adj_t_test, list_num_node_test, bc_mat_test, model_size, device, map_names):
+def inference(model, list_adj_test, list_adj_t_test, list_num_node_test, bc_mat_test, model_size, device, map_names):
     model.eval()
     num_samples_test = len(list_adj_test)
     orders = []
@@ -80,17 +80,14 @@ def test(model, list_adj_test, list_adj_t_test, list_num_node_test, bc_mat_test,
 
     return orders, pre_arrs
 
-def preprocess(graph_paths): 
-    graphs = []
-    for net in graph_paths:
-        g_nx = read_graph(map_path=net)
-        if nx.number_of_isolates(g_nx) > 0:
-            g_nx.remove_nodes_from(list(nx.isolates(g_nx)))
-            g_nx = nx.convert_node_labels_to_integers(g_nx) # 10647
-        
-        bet_dict = dict([(index,1) for index in range(nx.number_of_nodes(g_nx))])
-        graphs.append([g_nx, bet_dict])
-    return graphs
+def preprocess(graph_path): 
+    g_nx = read_graph(map_path=graph_path)
+    if nx.number_of_isolates(g_nx) > 0:
+        g_nx.remove_nodes_from(list(nx.isolates(g_nx)))
+        g_nx = nx.convert_node_labels_to_integers(g_nx) # 10647
+    
+    bet_dict = dict([(index,1) for index in range(nx.number_of_nodes(g_nx))])
+    return (g_nx, bet_dict)
 
 
 

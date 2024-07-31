@@ -39,9 +39,8 @@ def train(device, adj_size, list_adj_train,list_adj_t_train,list_num_node_train,
         optimizer.step()
     print(f"loss_train: {loss_train}", flush=True)
 
-def test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test, model, optimizer):
+def test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test, model, optimizer) -> int:
     model.eval()
-    ltype = "MRL"
     loss_val = 0
     list_kt = list()
     num_samples_test = len(list_adj_test)
@@ -56,10 +55,7 @@ def test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_m
 
         true_arr = torch.from_numpy(bc_mat_test[:,j]).float()
         true_val = true_arr.to(device)
-        if ltype == "MRL":
-            loss_rank = loss_cal(y_out,true_val,num_nodes,device,adj_size)
-        else:
-            loss_rank = mse_loss(y_out,true_val,num_nodes,device,adj_size)
+        loss_rank = loss_cal(y_out,true_val,num_nodes,device,adj_size)
         loss_val = loss_val + float(loss_rank)
         kt = ranking_correlation(y_out,true_val,num_nodes,adj_size)
         list_kt.append(kt)
@@ -67,7 +63,7 @@ def test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_m
         #print(f"Graph stats:{g_tmp.number_of_nodes()}/{g_tmp.number_of_edges()},  KT:{kt}")
     print(f' loss_test: {loss_val}', flush=True)
     print(f"  Average KT score on test graphs is: {np.mean(np.array(list_kt))} and std: {np.std(np.array(list_kt))}", flush=True)
-
+    return loss_val
 
 
 

@@ -9,6 +9,7 @@ import copy
 import random
 import numpy as np
 import torch
+import os
 
 
 def get_out_edges(g_nkit,node_sequence):
@@ -41,7 +42,27 @@ def nkit_inedges(u,v,weight,edgeid):
 def nkit_outedges(u,v,weight,edgeid):
     all_out_dict[u].add(v)
 
-    
+  
+def concat_path_and_get_filename(*args):  
+    """  
+    Concatenates arbitrary number of path segments and returns the full path and filename without extension.  
+      
+    Parameters:  
+    *args: Arbitrary number of path segments  
+  
+    Returns:  
+    Tuple containing the full path and filename without extension.  
+    """  
+    # Concatenate the path segments  
+    full_path = os.path.join(*args)  
+      
+    # Get the base name (file name with extension)  
+    base_name = os.path.basename(full_path)  
+      
+    # Remove the extension from the file name  
+    filename_without_ext = os.path.splitext(base_name)[0]  
+      
+    return full_path, filename_without_ext  
 
 def nx2nkit(g_nx):
     
