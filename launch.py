@@ -20,12 +20,12 @@ def gen_dataset(
 
 ):
     list_bet_data = list()
-    print("Generating graphs and calculating centralities...")
+    logger.info("Generating graphs and calculating centralities...")
     for i in range(num_of_graphs):
         print(f"Graph index:{i+1}/{num_of_graphs}",end='\r')
         g_nx = create_graph(graph_type, num_nodes)
         if nx.number_of_isolates(g_nx)>0:
-            #print("Graph has isolates.")
+            #logger.info("Graph has isolates.")
             g_nx.remove_nodes_from(list(nx.isolates(g_nx)))
             g_nx = nx.convert_node_labels_to_integers(g_nx)
         g_nkit = nx2nkit(g_nx)
@@ -33,35 +33,34 @@ def gen_dataset(
         list_bet_data.append([g_nx,bet_dict])
     raw_data_path = os.path.join(dataset_folder, "raw_data.pickle")
 
-    print(len(list_bet_data))
     with open(raw_data_path,"wb") as fopen:
         pickle.dump(list_bet_data,fopen)
-    print(f"\nRaw Graphs saved to {raw_data_path}, Now permutate graphs...")
+    logger.info(f"\nRaw Graphs saved to {raw_data_path}, Now permutate graphs...")
 
     #save betweenness split
     get_split(raw_data_path,num_train,num_test,num_copies,adj_size,dataset_folder)
-    print(f" Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle.")
+    logger.info(f" Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle.")
 
 
 def train_gnn(
         dataset_folder: str = "datasets/graphs/synthetic/",
         adj_size: int = 100000,
-        num_graph: int = 5,
         hidden: int = 12,
         num_epoch: int = 10,
-        model_path: str = "models/model.pt"
+        model_path: str = "models/model.pt",
+        use_cache_pth: bool = False,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device, flush=True)
+    logger.info(device)
 
-    print(f"Loading data...", flush=True)
+    logger.info(f"Loading data...")
     pth_data_path = [os.path.join(dataset_folder, "data_train.pth"), os.path.join(dataset_folder, "data_test.pth") ]
     with open(os.path.join(dataset_folder, "training.pickle"), "rb") as fopen:
         list_graph_train,list_n_seq_train,list_num_node_train,bc_mat_train = pickle.load(fopen)
     with open(os.path.join(dataset_folder, "test.pickle"), "rb") as fopen:
         list_graph_test,list_n_seq_test,list_num_node_test,bc_mat_test = pickle.load(fopen)
     
-    if os.path.exists(pth_data_path[0]) and os.path.exists(pth_data_path[1]): 
+    if use_cache_pth: 
         # 使用torch.load()加载数据  
         data_train = torch.load(pth_data_path[0])  
         data_test = torch.load(pth_data_path[1])  
@@ -74,7 +73,7 @@ def train_gnn(
         list_adj_t_test = data_test['list_adj_t_test']  
     else:
         #Get adjacency matrices from graphs
-        print(f"Graphs to adjacency conversion.", flush=True)
+        logger.info(f"Graphs to adjacency conversion.")
 
         list_adj_train,list_adj_t_train = graph_to_adj_bet(list_graph_train, list_n_seq_train, list_num_node_train, adj_size)
         list_adj_test,list_adj_t_test = graph_to_adj_bet(list_graph_test, list_n_seq_test, list_num_node_test, adj_size)
@@ -90,18 +89,18 @@ def train_gnn(
         # save adjacency matrices  
         torch.save(data_train, os.path.join(dataset_folder, 'data_train.pth'))  
         torch.save(data_test, os.path.join(dataset_folder, 'data_test.pth'))
-        print(f"Adajacency matricies saved to {os.path.join(dataset_folder, 'data_train.pth')} and {os.path.join(dataset_folder, 'data_test.pth')}")
+        logger.info(f"Adajacency matricies saved to {os.path.join(dataset_folder, 'data_train.pth')} and {os.path.join(dataset_folder, 'data_test.pth')}")
 
 
     # train
-    print("Training", flush=True)
-    print(f"Total Number of epoches: {num_epoch}", flush=True)
+    logger.info("Training")
+    logger.info(f"Total Number of epoches: {num_epoch}")
     model = GNN_Bet(ninput=adj_size, nhid=hidden, dropout=0.6)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     loss = 9999999
     for e in range(num_epoch):
-        print(f"Epoch number: {e+1}/{num_epoch}", flush=True)
+        logger.info(f"Epoch number: {e+1}/{num_epoch}")
         train(device, adj_size, list_adj_train,list_adj_t_train,list_num_node_train,bc_mat_train, model, optimizer)
 
         #to check test loss while training
@@ -110,7 +109,7 @@ def train_gnn(
             if loss_epoch < loss:
                 loss = loss_epoch 
                 torch.save(model, model_path)
-                print(f"save the {e+1} epoch model to {model_path}...")
+                logger.info(f"save the {e+1} epoch model to {model_path}...")
 
 
 
@@ -123,7 +122,7 @@ def inference_gnn_based_centrality(
 ):
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)    
+    logger.info(device)    
     for graph_name in graph_names:
         graph_path = concat_path(graph_folder, graph_name)
         graph = preprocess(graph_path)
@@ -134,13 +133,13 @@ def inference_gnn_based_centrality(
         list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset([graph], num_copies = 1, adj_size= adj_size)
         list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
         end = time.perf_counter()
-        print(f'The time of load model is {end-start}s')
+        logger.info(f'The time of load model is {end-start}s')
 
 
         start = time.perf_counter()
         _, pre_arrs = inference(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device)
         end = time.perf_counter()
-        print(f'The time of cal centrality is {end-start}s\n\n')
+        logger.info(f'The time of cal centrality is {end-start}s\n\n')
 
         dest_value_path = concat_path(centrality_folder, get_file_without_extension_name(model_path), get_file_without_extension_name(graph_name) + "_value.txt")
         dest_ranking_path = concat_path(centrality_folder, get_file_without_extension_name(model_path), get_file_without_extension_name(graph_name) + "_ranking.txt")
