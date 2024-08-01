@@ -3,6 +3,6 @@
 *.log
 __pycache__
 *.txt
-*.ipynb
+# *.ipynb
 .vscode
 *.pth

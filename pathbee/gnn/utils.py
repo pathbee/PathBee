@@ -3,13 +3,14 @@ import networkx as nx
 from scipy.linalg import block_diag
 from scipy.sparse import csr_matrix
 from scipy.stats import kendalltau
-import pickle
 import scipy.sparse as sp
-import copy
-import random
 import numpy as np
 import torch
-
+import os
+from multiprocessing import Process, Queue  
+import os  
+from typing import List
+import logging
 
 def get_out_edges(g_nkit,node_sequence):
     global all_out_dict
@@ -41,8 +42,25 @@ def nkit_inedges(u,v,weight,edgeid):
 def nkit_outedges(u,v,weight,edgeid):
     all_out_dict[u].add(v)
 
-    
+  
+def concat_path(*args):  
+    """  
+    Concatenates arbitrary number of path segments and returns the full path.  
+      
+    Parameters:  
+    *args: Arbitrary number of path segments  
+    """  
+    # Concatenate the path segments  
+    return os.path.join(*args)  
 
+def get_file_without_extension_name(full_path):
+
+    base_name = os.path.basename(full_path)  
+    # Remove the extension from the file name  
+    filename_without_ext = os.path.splitext(base_name)[0]
+
+    return filename_without_ext
+  
 def nx2nkit(g_nx):
     
     node_num = g_nx.number_of_nodes()
@@ -58,6 +76,49 @@ def nx2nkit(g_nx):
     assert g_nx.number_of_edges()==g_nkit.numberOfEdges(),"Number of edges not matching"
         
     return g_nkit
+
+
+def execute_command(cmd: str) -> None:  
+    """  
+    Execute a shell command.  
+    """
+    import subprocess   
+    # If the command is None, just return  
+    logger = get_logger()
+    if cmd is None:  
+        return 
+        # raise ValueError("the command must not be None")
+    logger.info(f"start running {cmd}...")
+    result = subprocess.run(cmd, shell=True, text=True, capture_output=True)   
+    logger.info(result.stdout) 
+    logger.info(f"finish running {cmd}...\n")  
+
+  
+def parallel_process(commands: List[str], num_processes: int) -> None:  
+    """  
+    Execute shell commands in parallel.  
+  
+    commands: List of shell commands.  
+    num_processes: Number of processes to start.  
+    """  
+    # Create a queue to hold the commands  
+    command_queue = Queue()  
+    for cmd in commands:  
+        command_queue.put(cmd)  
+  
+    # Add "stop" signals to the queue  
+    for _ in range(num_processes):  
+        command_queue.put(None)  
+  
+    # Create and start initial processes  
+    processes = [Process(target=execute_command, args=(command_queue.get(),)) for _ in range(num_processes)]  
+    for p in processes:  
+        p.start()  
+  
+    # Wait for all processes to finish  
+    for p in processes:  
+        p.join()  
+
 
 def read_graph(map_path):
     import networkx as nx
@@ -199,6 +260,44 @@ def graph_to_adj_bet(list_graph,list_n_sequence,list_node_num,model_size):
         list_adjacency_t.append(adj_mat_t)
     print("", flush=True)          
     return list_adjacency,list_adjacency_t
+
+
+def get_logger(name: str = "pathbee", level: str = 'INFO', filename: str = 'pathbee.log') -> logging.Logger:  
+    """   
+    Create and return a logger with the specified name and level.  
+  
+    Args:  
+        name (str): Name of the logger.  
+        level (str): Logging level, default is 'INFO'.  
+        filename (str): Name of the log file, default is 'app.log'.  
+  
+    Returns:  
+        logging.Logger: A logger instance.  
+    """  
+    logger = logging.getLogger(name)  
+    logger.setLevel(level)  
+  
+    # Only add handlers if the logger doesn't have any  
+    if not logger.handlers:  
+        # Create a file handler and a console handler  
+        fh = logging.FileHandler(filename)  
+        ch = logging.StreamHandler()  
+  
+        # Set the level for both handlers  
+        fh.setLevel(level)  
+        ch.setLevel(level)  
+  
+        # Create a formatter and add it to the handlers  
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')  
+        fh.setFormatter(formatter)  
+        ch.setFormatter(formatter)  
+  
+        # Add the handlers to the logger  
+        logger.addHandler(fh)  
+        logger.addHandler(ch)  
+  
+    return logger  
+
 
 def graph_to_adj_close(list_graph,list_n_sequence,list_node_num,model_size,print_time=False):
     
