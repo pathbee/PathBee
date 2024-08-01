@@ -126,11 +126,11 @@ def inference_gnn_based_centrality(
     for graph_name in graph_names:
         graph_path = concat_path(graph_folder, graph_name)
         graph = preprocess(graph_path)
-
+    # 1: GRAPH
         
         start = time.perf_counter()
         model = torch.load(model_path)
-        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset([graph], num_copies = 1, adj_size= adj_size)
+        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict([graph], num_copies = 1, adj_size= adj_size)
         list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
         end = time.perf_counter()
         logger.info(f'The time of load model is {end-start}s')
