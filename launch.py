@@ -4,7 +4,7 @@ from pathbee.gnn.betweenness import *
 from pathbee.gnn.predict import *
 
 import fire
-from typing import List, Union
+from typing import List, Union, Literal
 
 logger = get_logger()
 
@@ -51,8 +51,7 @@ def train_gnn(
         use_cache_pth: bool = False,
 ):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    logger.info(device)
-
+    print(device)
     logger.info(f"Loading data...")
     pth_data_path = [os.path.join(dataset_folder, "data_train.pth"), os.path.join(dataset_folder, "data_test.pth") ]
     with open(os.path.join(dataset_folder, "training.pickle"), "rb") as fopen:
@@ -94,13 +93,13 @@ def train_gnn(
 
     # train
     logger.info("Training")
-    logger.info(f"Total Number of epoches: {num_epoch}")
+    print(f"Total Number of epoches: {num_epoch}")
     model = GNN_Bet(ninput=adj_size, nhid=hidden, dropout=0.6)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     loss = 9999999
     for e in range(num_epoch):
-        logger.info(f"Epoch number: {e+1}/{num_epoch}")
+        print(f"Epoch number: {e+1}/{num_epoch}")
         train(device, adj_size, list_adj_train,list_adj_t_train,list_num_node_train,bc_mat_train, model, optimizer)
 
         #to check test loss while training
@@ -109,7 +108,7 @@ def train_gnn(
             if loss_epoch < loss:
                 loss = loss_epoch 
                 torch.save(model, model_path)
-                logger.info(f"save the {e+1} epoch model to {model_path}...")
+                print(f"save the {e+1} epoch model to {model_path}...")
 
 
 
@@ -122,27 +121,20 @@ def inference_gnn_based_centrality(
 ):
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    logger.info(device)    
+    print(device)
+    logger.info(f"model used for inference: {model_path}")
     for graph_name in graph_names:
         graph_path = concat_path(graph_folder, graph_name)
         graph = preprocess(graph_path)
-
+    # 1: GRAPH
         
-        start = time.perf_counter()
         model = torch.load(model_path)
-        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset([graph], num_copies = 1, adj_size= adj_size)
+        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict([graph], num_copies = 1, adj_size= adj_size)
         list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
-        end = time.perf_counter()
-        logger.info(f'The time of load model is {end-start}s')
-
-
-        start = time.perf_counter()
         _, pre_arrs = inference(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device)
-        end = time.perf_counter()
-        logger.info(f'The time of cal centrality is {end-start}s\n\n')
 
-        dest_value_path = concat_path(centrality_folder, get_file_without_extension_name(model_path), get_file_without_extension_name(graph_name) + "_value.txt")
-        dest_ranking_path = concat_path(centrality_folder, get_file_without_extension_name(model_path), get_file_without_extension_name(graph_name) + "_ranking.txt")
+        dest_value_path = concat_path(centrality_folder, get_file_without_extension_name(graph_name) + "_value.txt")
+        dest_ranking_path = concat_path(centrality_folder, get_file_without_extension_name(graph_name) + "_ranking.txt")
 
         dest_dir = os.path.dirname(dest_value_path)
         if not os.path.exists(dest_dir):
@@ -165,10 +157,11 @@ def inference_gnn_based_centrality(
 def run_2_hop_labeling(
         graph_folder: str = "datasets/graphs/real_world",
         graph_names: Union[str, List[str]] = "GN.txt",  
-        centrality_folder: str = "datasets/centralities/gnn/sum_aggre",  
+        centrality_folder: str = "datasets/centralities",
+        centrality_type: Literal['dc','bc','gnn'] = "gnn",  
         algorithm_path: str = "pathbee/algorithms/2_hop_labeling.cpp",  
         num_processes: int = 1  
-) -> None:  
+) -> None: 
     """  
     Run 2-hop labeling algorithm.  
   
@@ -179,17 +172,18 @@ def run_2_hop_labeling(
     """  
     params = locals()
     for param_name, param_value in params.items():  
-        logger.info(f"{param_name}: {param_value}")  
+        print(f"{param_name}: {param_value}")  
     # Compile the algorithm  
     execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")  
     
     if isinstance(graph_names, str):  
         graph_name = graph_names
-        cmd = f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, get_file_without_extension_name(graph_name)+ '_ranking.txt')}"  
+        cmd = f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, centrality_type, get_file_without_extension_name(graph_name)+ '_ranking.txt')}"  
         execute_command(cmd)
     elif isinstance(graph_names, list):  
-        commands = [f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, get_file_without_extension_name(graph_name)+'_ranking.txt')}" for graph_name in graph_names]  
+        commands = [f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, centrality_type,get_file_without_extension_name(graph_name)+'_ranking.txt')}" for graph_name in graph_names]  
         parallel_process(commands, num_processes)  
+    logger.info("-----------------------------------------------------------------------------")
 
 command_map = {
     "gen": gen_dataset,
