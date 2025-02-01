@@ -1,6 +1,6 @@
 # PathBee: A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms (VLDB 2025)
 
-This repository hosts the source code and supplementary materials for our VLDB 2025 paper, "PathBee: Accelerating Shortest Path Querying via Graph Neural Networks". This work presents PathBee, an innovative framework leveraging Graph Neural Networks (GNNs) that significantly advances the current 2-hop labeling-based approaches.
+This repository hosts the source code and supplementary materials for our VLDB 2025 paper, "A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms". This work presents PathBee, an innovative framework leveraging Graph Neural Networks (GNNs) that significantly advances the current 2-hop labeling-based approaches.
 
 ## PathBee Workflow
 
