@@ -11,7 +11,7 @@ Our workflow is comprised of four key stages:
 3. **GNN Model Inference**: This stage is dedicated to predicting Betweenness Centrality (BC) values.
 4. **Execute 2-Hop Labeling**: We utilize the predicted BC values to sort nodes and execute the 2-Hop Labeling algorithm.
 
-![Workflow](assets\pipeline.png)
+![Workflow](assets/pipeline.png)
 
 ## Code Structure
 
