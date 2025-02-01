@@ -15,7 +15,31 @@ Our workflow is comprised of four key stages:
 
 ## Code Structure
 
-_(Provide a brief description of the main components of your codebase here.)_
+```sh
+PathBee
+├── 2_hop_labeling              # Folder for 2-hop labeling algorithm
+├── datasets                    # Folder for data-related files
+│   ├── centralities            # Folder for centrality data
+│   │   └── gnn                 # GNN-related centrality data
+│   └── graphs                  # Folder for graph data
+│       └── synthetic           # Synthetic graph-related data
+├── launch.py                   # Script to launch the application
+├── models                      # Folder for storing model files
+├── pathbee                     # Main folder for core algorithms and functions
+│   ├── algorithms              # Folder for algorithm-related code
+│   │   ├── 2_hop_labeling.cpp  # 2-Hop Labeling algorithm implementation
+│   │   └── pruned_indexing.h   # Header for pruned indexing algorithm
+│   └── gnn                     # Folder for GNN-related code
+│       ├── betweenness.py      # Script to train GNN for betweenness centrality
+│       ├── gen_datasets        # Folder for dataset generation scripts
+│       │   ├── cal_centrality.py # Toolkit for calculating centrality
+│       │   ├── create_dataset.py # Dataset creation script
+│       │   └── generate_graph.py # Graph generation script
+│       ├── layer.py            # GNN layer implementation
+│       ├── model_bet.py        # GNN model for betweenness centrality
+│       ├── predict.py          # GNN model inference script
+│       └── utils.py            # Utility functions for graph operations
+```
 
 ## Quick Start
 
