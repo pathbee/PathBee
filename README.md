@@ -1,6 +1,6 @@
-# PathBee: A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms (VLDB 2025)
+# PathBee: A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms (SIGMOD 2026)
 
-This repository hosts the source code and supplementary materials for our VLDB 2025 paper, "A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms". This work presents PathBee, an innovative framework leveraging Graph Neural Networks (GNNs) that significantly advances the current 2-hop labeling-based approaches.
+This repository hosts the source code and supplementary materials for our SIGMOD 2026 paper, "A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms". This work presents PathBee, an innovative framework leveraging Graph Neural Networks (GNNs) that significantly advances the current 2-hop labeling-based approaches.
 
 ## PathBee Workflow
 
@@ -52,7 +52,6 @@ pip install -r requirements.txt
 ```
 
 To execute the 2_hop_labeling, you need to have GCC 11.3.0 or above installed.
-
 
 ### Step 1: Training Data Preparation
 
@@ -111,6 +110,7 @@ The performance comparison result is shown as below.
 <div align=center><img alt="pll_IT"src="assets\pll_QT.png"/></div>
 
 ### Scalability of PathBee
+
 In the experiment for scalability validation, we randomly divide vertices of a graph into 5 equally sized vertex groups and create 5 graphs for the cases of 20%, 40%, 60%, 80%, 100%: the 𝑖-th graph is the induced subgraph on the first 𝑖-th vertex group.
 
 The scalability validation result is shown as below.
