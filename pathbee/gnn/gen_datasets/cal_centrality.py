@@ -4,23 +4,37 @@ import sys
 import os 
 import time
 import argparse
+from typing import Tuple, List, Dict, Any, Callable
 
-# Allows the user to specify the type of centrality calculation ('bc', 'dc', etc.) from the command line.
-parser = argparse.ArgumentParser()
-parser.add_argument('-centrality', type=str, default='bc')
-args = parser.parse_args()
+def setup_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='Calculate various centrality measures for graphs')
+    parser.add_argument('--centrality', '-c', type=str, nargs='+', default=['bc'],
+                      choices=['dc', 'bc', 'gs', 'kadabra', 'close', 'eigen'],
+                      help='Type of centrality to calculate (dc=degree, bc=betweenness, etc.). Can specify multiple.')
+    parser.add_argument('--graph-path', '-g', type=str, required=True,
+                      help='Path to the graph file')
+    parser.add_argument('--save-dir', '-s', type=str, required=True,
+                      help='Directory to save centrality results')
+    parser.add_argument('--force', '-f', action='store_true',
+                      help='Force recalculation even if results exist')
+    return parser
 
 # Loads a graph from a text file.
-def read_graph(map_path):
+def read_graph(map_path: str) -> Tuple[nx.DiGraph, nk.Graph]:
+    if not os.path.exists(map_path):
+        raise FileNotFoundError(f"Graph file not found: {map_path}")
+        
     g_nx = nx.DiGraph()
-    f = open(map_path, 'r')
-    data = f.readlines()
-    f.close()
-    for idx, lines in enumerate(data):
-        src, dest = lines.split()
-        g_nx.add_edge(int(src), int(dest))
+    try:
+        with open(map_path, 'r') as f:
+            for line in f:
+                src, dest = line.strip().split()
+                g_nx.add_edge(int(src), int(dest))
+    except Exception as e:
+        raise RuntimeError(f"Error reading graph file {map_path}: {str(e)}")
+        
     g_nk = nx2nkit(g_nx)
-    print(f"map {map_path} has {g_nx.number_of_nodes()} nodes and {g_nx.number_of_edges()} edges.")
+    print(f"Map {map_path} has {g_nx.number_of_nodes()} nodes and {g_nx.number_of_edges()} edges.")
     return g_nx, g_nk
 
 # Converts a NetworkX graph to a NetworKit graph
@@ -89,19 +103,23 @@ def closeness_centrality(g_nk):
     Close_ranking = temp.ranking()  
     return Close_value, Close_ranking
 
-
-    
-def save_centrality(centrality_value, centrality_ranking, save_path):
-    dir_path = os.path.dirname(save_path)
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-    file_path = os.path.join(save_path)
-    with open(save_path[:-4] + "_value.txt", 'w') as f:
-        for item in centrality_value:
-            f.write(str(item[1]) + " " + str(item[0]) + "\n")
-    with open(save_path[:-4] + "_ranking.txt", 'w') as f:
-        for item in centrality_ranking:
-            f.write(str(item[1]) + " " + str(item[0]) + "\n")
+def save_centrality(centrality_value: List[Tuple], centrality_ranking: List[Tuple], save_path: str) -> None:
+    try:
+        dir_path = os.path.dirname(save_path)
+        os.makedirs(dir_path, exist_ok=True)
+        
+        value_path = save_path[:-4] + "_value.txt"
+        ranking_path = save_path[:-4] + "_ranking.txt"
+        
+        with open(value_path, 'w') as f:
+            for item in centrality_value:
+                f.write(f"{item[1]} {item[0]}\n")
+                
+        with open(ranking_path, 'w') as f:
+            for item in centrality_ranking:
+                f.write(f"{item[1]} {item[0]}\n")
+    except Exception as e:
+        raise RuntimeError(f"Error saving centrality results: {str(e)}")
 
 # Create a dictionary mapping strings to functions
 centrality_dict = {
@@ -113,21 +131,55 @@ centrality_dict = {
     'eigen': eigenvector_centrality  # Eigenvector centrality
 }
 
+def main():
+    parser = setup_argument_parser()
+    args = parser.parse_args()
+    
+    # Validate input path
+    if not os.path.exists(args.graph_path):
+        raise FileNotFoundError(f"Graph file not found: {args.graph_path}")
+    
+    # Create save directory if it doesn't exist
+    os.makedirs(args.save_dir, exist_ok=True)
+    
+    try:
+        print(f"Processing graph: {args.graph_path}", flush=True)
+        g_nx, g_nk = read_graph(args.graph_path)
         
-graph_folder = "/realgraphs_world"
-centrality_folder = 'datasets/centralities'
-centrality_type = args.centrality
+        # Process each centrality type
+        for centrality_type in args.centrality:
+            # Generate save paths using just the centrality type
+            value_path = os.path.join(args.save_dir, f"{centrality_type}_value.txt")
+            ranking_path = os.path.join(args.save_dir, f"{centrality_type}_ranking.txt")
+            
+            # Skip if results exist and force flag is not set
+            if not args.force and os.path.exists(value_path) and os.path.exists(ranking_path):
+                print(f"Results for {centrality_type} already exist. Use --force to recalculate.")
+                continue
+                
+            print(f"Calculating {centrality_type} centrality...", flush=True)
+            centrality_value, centrality_ranking = calculate_centrality(
+                g_nx=g_nx,
+                g_nk=g_nk,
+                centrality_func=centrality_dict[centrality_type]
+            )
+            
+            # Save value and ranking separately
+            with open(value_path, 'w') as f:
+                for item in centrality_value:
+                    f.write(f"{item[1]} {item[0]}\n")
+                    
+            with open(ranking_path, 'w') as f:
+                for item in centrality_ranking:
+                    f.write(f"{item[1]} {item[0]}\n")
+                    
+            print(f"Completed {centrality_type} centrality calculation")
+            
+        print("All calculations completed successfully")
+    except Exception as e:
+        print(f"Error processing graph: {str(e)}")
+        sys.exit(1)
 
-if __name__ == "__main__":  
-    graphs = get_all_file_names(graph_folder)
-    for graph in graphs:
-        
-        save_path = os.path.join(centrality_folder, centrality_type, graph)
-        if os.path.exists(save_path[:-4] + "_value.txt") and os.path.exists(save_path[:-4] + "_ranking.txt"):
-            print(f"{graph} has been calculated before.")
-        else:
-            print(f"run {graph}", flush= True)
-            g_nx, g_nk = read_graph(f"{graph_folder}/{graph}")
-            centrality_value, centrality_ranking = calculate_centrality(g_nx= g_nx, g_nk= g_nk, centrality_func= centrality_dict[centrality_type])
-            save_centrality(centrality_value = centrality_value, centrality_ranking= centrality_ranking, save_path= save_path)
+if __name__ == "__main__":
+    main()
     

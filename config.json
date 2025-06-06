@@ -24,10 +24,8 @@
         "adj_size": 1000000
     },
     "indexing": {
-        "graph_folder": "datasets/graphs/real_world",
-        "graph_names": ["GN.txt"],
-        "centrality_folder": "datasets/centralities",
-        "centrality_type": "gnn",
+        "graph_path": "datasets/graphs/real_world/email-enron.txt",
+        "centrality_path": "datasets/centralities/gnn/email-enron_ranking.txt",
         "algorithm_path": "pathbee/algorithms/2_hop_labeling.cpp",
         "num_processes": 1
     }

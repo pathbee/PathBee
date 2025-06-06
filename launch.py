@@ -3,17 +3,21 @@ from pathbee.gnn.gen_datasets.generate_graph import *
 from pathbee.gnn.betweenness import *
 from pathbee.gnn.predict import *
 
-import fire
+import argparse
 import json
 from typing import List, Union, Literal
 from pathlib import Path
 
 logger = get_logger()
 
-def load_config(config_path: str = "config.json") -> dict:
-    """Load configuration from JSON file."""
-    with open(config_path, 'r') as f:
-        return json.load(f)
+def get_device():
+    """Get the appropriate device for the current system."""
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda:0")
+    else:
+        return torch.device("cpu")
 
 def gen_dataset(
         num_of_graphs: int,
@@ -57,15 +61,6 @@ def gen_dataset(
         dataset_folder
     )
     logger.info(f"Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle.")
-
-def get_device():
-    """Get the appropriate device for the current system."""
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda:0")
-    else:
-        return torch.device("cpu")
 
 def train_gnn(
         dataset_folder: str,
@@ -180,55 +175,123 @@ def inference_gnn_based_centrality(
                 f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
 def run_2_hop_labeling(
-        graph_folder: str,
-        graph_names: Union[str, List[str]],
-        centrality_folder: str,
-        centrality_type: Literal['dc', 'bc', 'gnn'],
+        graph_path: str,
+        centrality_path: str,
         algorithm_path: str,
         num_processes: int,
 ):
     """Run 2-hop labeling algorithm."""
-    # Compile the algorithm
+    # Compile and run
     execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")
-
-    if isinstance(graph_names, str):
-        graph_names = [graph_names]
-
-    commands = []
-    for graph_name in graph_names:
-        base_name = get_file_without_extension_name(graph_name)
-        cmd = f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, centrality_type, f'{base_name}_ranking.txt')}"
-        commands.append(cmd)
-
-    parallel_process(commands, num_processes)
+    execute_command("chmod +x 2_hop_labeling")
+    cmd = f"./2_hop_labeling {graph_path} {centrality_path}"
+    parallel_process([cmd], num_processes)
     logger.info("2-hop labeling completed")
 
-command_map = {
-    "gen": gen_dataset,
-    "train": train_gnn,
-    "infer": inference_gnn_based_centrality,
-    "indexing": run_2_hop_labeling,
-}
+def setup_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='PathBee: Graph Neural Network for Path Queries')
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
-def main(command: str = "pll", config_path: str = "config.json"):
-    """Main entry point for the application."""
-    if command not in command_map:
-        raise ValueError(f"Unknown command: {command}. Available commands: {list(command_map.keys())}")
-    
-    # Load configuration
-    config = load_config(config_path)
-    
-    # Call the appropriate function with its parameters
-    if command == "gen":
-        gen_dataset(**config['gen'])
-    elif command == "train":
-        train_gnn(**config['train'])
-    elif command == "infer":
-        inference_gnn_based_centrality(**config['infer'])
-    elif command == "indexing":
-        run_2_hop_labeling(**config['indexing'])
+    # Gen dataset command
+    gen_parser = subparsers.add_parser('gen', help='Generate dataset for training and testing')
+    gen_parser.add_argument('--num-of-graphs', type=int, default=5,
+                          help='Number of graphs to generate')
+    gen_parser.add_argument('--num-train', type=int, default=4,
+                          help='Number of training graphs')
+    gen_parser.add_argument('--num-test', type=int, default=1,
+                          help='Number of test graphs')
+    gen_parser.add_argument('--num-copies', type=int, default=50,
+                          help='Number of copies for each graph')
+    gen_parser.add_argument('--graph-type', type=str, default='SF',
+                          help='Type of graph to generate')
+    gen_parser.add_argument('--dataset-folder', type=str, default='datasets/graphs/synthetic/',
+                          help='Folder to save the dataset')
+    gen_parser.add_argument('--num-nodes', type=int, default=100000,
+                          help='Number of nodes in each graph')
+    gen_parser.add_argument('--adj-size', type=int, default=1000000,
+                          help='Size of adjacency matrix')
+
+    # Train command
+    train_parser = subparsers.add_parser('train', help='Train GNN model')
+    train_parser.add_argument('--dataset-folder', type=str, default='datasets/graphs/synthetic/',
+                            help='Folder containing the dataset')
+    train_parser.add_argument('--adj-size', type=int, default=1000000,
+                            help='Size of adjacency matrix')
+    train_parser.add_argument('--hidden', type=int, default=12,
+                            help='Hidden layer size')
+    train_parser.add_argument('--num-epoch', type=int, default=10,
+                            help='Number of training epochs')
+    train_parser.add_argument('--model-path', type=str, default='models/model.pt',
+                            help='Path to save the trained model')
+
+    # Inference command
+    infer_parser = subparsers.add_parser('infer', help='Run inference using trained GNN model')
+    infer_parser.add_argument('--graph-folder', type=str, default='datasets/graphs/real_world',
+                            help='Folder containing input graphs')
+    infer_parser.add_argument('--graph-names', type=str, nargs='+', default=['GN.txt'],
+                            help='Names of graph files to process')
+    infer_parser.add_argument('--centrality-folder', type=str, default='datasets/centralities/gnn',
+                            help='Folder to save centrality results')
+    infer_parser.add_argument('--model-path', type=str, default='models/MRL_6layer_1.pt',
+                            help='Path to the trained model')
+    infer_parser.add_argument('--adj-size', type=int, default=1000000,
+                            help='Size of adjacency matrix')
+
+    # Indexing command
+    indexing_parser = subparsers.add_parser('indexing', help='Run 2-hop labeling algorithm')
+    indexing_parser.add_argument('--graph-path', type=str, required=True,
+                               help='Path to the input graph file')
+    indexing_parser.add_argument('--centrality-path', type=str, required=True,
+                               help='Path to the centrality ranking file')
+    indexing_parser.add_argument('--algorithm-path', type=str, default='pathbee/algorithms/2_hop_labeling.cpp',
+                               help='Path to the 2-hop labeling algorithm source code')
+    indexing_parser.add_argument('--num-processes', type=int, default=1,
+                               help='Number of parallel processes to use')
+
+    return parser
+
+def main():
+    parser = setup_parser()
+    args = parser.parse_args()
+
+    if args.command == 'gen':
+        gen_dataset(
+            num_of_graphs=args.num_of_graphs,
+            num_train=args.num_train,
+            num_test=args.num_test,
+            num_copies=args.num_copies,
+            graph_type=args.graph_type,
+            dataset_folder=args.dataset_folder,
+            num_nodes=args.num_nodes,
+            adj_size=args.adj_size
+        )
+    elif args.command == 'train':
+        train_gnn(
+            dataset_folder=args.dataset_folder,
+            adj_size=args.adj_size,
+            hidden=args.hidden,
+            num_epoch=args.num_epoch,
+            model_path=args.model_path
+        )
+    elif args.command == 'infer':
+        inference_gnn_based_centrality(
+            graph_folder=args.graph_folder,
+            graph_names=args.graph_names,
+            centrality_folder=args.centrality_folder,
+            model_path=args.model_path,
+            adj_size=args.adj_size
+        )
+    elif args.command == 'indexing':
+        run_2_hop_labeling(
+            graph_path=args.graph_path,
+            centrality_path=args.centrality_path,
+            algorithm_path=args.algorithm_path,
+            num_processes=args.num_processes
+        )
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
     logger.info("START EXECUTE CODE************************")
-    fire.Fire(main)
+    main()
     logger.info("FINISH EXECUTE CODE************************\n\n\n")
