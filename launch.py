@@ -4,147 +4,172 @@ from pathbee.gnn.betweenness import *
 from pathbee.gnn.predict import *
 
 import fire
+import json
 from typing import List, Union, Literal
+from pathlib import Path
 
 logger = get_logger()
 
-def gen_dataset(
-        num_of_graphs: int = 5,
-        num_train: int = 4,
-        num_test: int = 1,
-        num_copies: int = 50,
-        graph_type: str = "SF",
-        dataset_folder: str = "datasets/graphs/synthetic/",
-        num_nodes: int = 100000,
-        adj_size: int = 100000,
+def load_config(config_path: str = "config.json") -> dict:
+    """Load configuration from JSON file."""
+    with open(config_path, 'r') as f:
+        return json.load(f)
 
+def gen_dataset(
+        num_of_graphs: int,
+        num_train: int,
+        num_test: int,
+        num_copies: int,
+        graph_type: str,
+        dataset_folder: str,
+        num_nodes: int,
+        adj_size: int,
 ):
+    """Generate dataset for training and testing."""
     list_bet_data = list()
     logger.info("Generating graphs and calculating centralities...")
+    
     for i in range(num_of_graphs):
-        print(f"Graph index:{i+1}/{num_of_graphs}",end='\r')
+        print(f"Graph index:{i+1}/{num_of_graphs}", end='\r')
         g_nx = create_graph(graph_type, num_nodes)
-        if nx.number_of_isolates(g_nx)>0:
-            #logger.info("Graph has isolates.")
+        
+        if nx.number_of_isolates(g_nx) > 0:
             g_nx.remove_nodes_from(list(nx.isolates(g_nx)))
             g_nx = nx.convert_node_labels_to_integers(g_nx)
+            
         g_nkit = nx2nkit(g_nx)
         bet_dict = cal_exact_bet(g_nkit)
-        list_bet_data.append([g_nx,bet_dict])
-    raw_data_path = os.path.join(dataset_folder, "raw_data.pickle")
+        list_bet_data.append([g_nx, bet_dict])
 
-    with open(raw_data_path,"wb") as fopen:
-        pickle.dump(list_bet_data,fopen)
+    raw_data_path = os.path.join(dataset_folder, "raw_data.pickle")
+    Path(dataset_folder).mkdir(parents=True, exist_ok=True)
+
+    with open(raw_data_path, "wb") as fopen:
+        pickle.dump(list_bet_data, fopen)
     logger.info(f"\nRaw Graphs saved to {raw_data_path}, Now permutate graphs...")
 
-    #save betweenness split
-    get_split(raw_data_path,num_train,num_test,num_copies,adj_size,dataset_folder)
-    logger.info(f" Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle.")
+    get_split(
+        raw_data_path,
+        num_train,
+        num_test,
+        num_copies,
+        adj_size,
+        dataset_folder
+    )
+    logger.info(f"Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle.")
 
+def get_device():
+    """Get the appropriate device for the current system."""
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda:0")
+    else:
+        return torch.device("cpu")
 
 def train_gnn(
-        dataset_folder: str = "datasets/graphs/synthetic/",
-        adj_size: int = 100000,
-        hidden: int = 12,
-        num_epoch: int = 10,
-        model_path: str = "models/model.pt",
-        use_cache_pth: bool = False,
+        dataset_folder: str,
+        adj_size: int,
+        hidden: int,
+        num_epoch: int,
+        model_path: str,
 ):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)
-    logger.info(f"Loading data...")
-    pth_data_path = [os.path.join(dataset_folder, "data_train.pth"), os.path.join(dataset_folder, "data_test.pth") ]
+    """Train GNN model."""
+    device = get_device()
+    logger.info(f"Using device: {device}")
+    
+    logger.info("Loading data...")
+    pth_data_path = [
+        os.path.join(dataset_folder, "data_train.pth"),
+        os.path.join(dataset_folder, "data_test.pth")
+    ]
+    
     with open(os.path.join(dataset_folder, "training.pickle"), "rb") as fopen:
-        list_graph_train,list_n_seq_train,list_num_node_train,bc_mat_train = pickle.load(fopen)
+        list_graph_train, list_n_seq_train, list_num_node_train, bc_mat_train = pickle.load(fopen)
     with open(os.path.join(dataset_folder, "test.pickle"), "rb") as fopen:
-        list_graph_test,list_n_seq_test,list_num_node_test,bc_mat_test = pickle.load(fopen)
-    
-    if use_cache_pth: 
-        # 使用torch.load()加载数据  
-        data_train = torch.load(pth_data_path[0])  
-        data_test = torch.load(pth_data_path[1])  
-        
-        # 从字典中提取你的列表  
-        list_adj_train = data_train['list_adj_train']  
-        list_adj_t_train = data_train['list_adj_t_train']  
-        
-        list_adj_test = data_test['list_adj_test']  
-        list_adj_t_test = data_test['list_adj_t_test']  
-    else:
-        #Get adjacency matrices from graphs
-        logger.info(f"Graphs to adjacency conversion.")
+        list_graph_test, list_n_seq_test, list_num_node_test, bc_mat_test = pickle.load(fopen)
 
-        list_adj_train,list_adj_t_train = graph_to_adj_bet(list_graph_train, list_n_seq_train, list_num_node_train, adj_size)
-        list_adj_test,list_adj_t_test = graph_to_adj_bet(list_graph_test, list_n_seq_test, list_num_node_test, adj_size)
-        data_train = {  
-            'list_adj_train': list_adj_train,  
-            'list_adj_t_train': list_adj_t_train  
-        }  
-        data_test = {  
-            'list_adj_test': list_adj_test,  
-            'list_adj_t_test': list_adj_t_test  
-        }  
-    
-        # save adjacency matrices  
-        torch.save(data_train, os.path.join(dataset_folder, 'data_train.pth'))  
-        torch.save(data_test, os.path.join(dataset_folder, 'data_test.pth'))
-        logger.info(f"Adajacency matricies saved to {os.path.join(dataset_folder, 'data_train.pth')} and {os.path.join(dataset_folder, 'data_test.pth')}")
+    # Get adjacency matrices from graphs
+    logger.info("Converting graphs to adjacency matrices")
+    list_adj_train, list_adj_t_train = graph_to_adj_bet(
+        list_graph_train, list_n_seq_train, list_num_node_train, adj_size
+    )
+    list_adj_test, list_adj_t_test = graph_to_adj_bet(
+        list_graph_test, list_n_seq_test, list_num_node_test, adj_size
+    )
 
+    # Save adjacency matrices
+    data_train = {
+        'list_adj_train': list_adj_train,
+        'list_adj_t_train': list_adj_t_train
+    }
+    data_test = {
+        'list_adj_test': list_adj_test,
+        'list_adj_t_test': list_adj_t_test
+    }
 
-    # train
-    logger.info("Training")
-    print(f"Total Number of epoches: {num_epoch}")
+    torch.save(data_train, pth_data_path[0])
+    torch.save(data_test, pth_data_path[1])
+    logger.info(f"Adjacency matrices saved to {pth_data_path[0]} and {pth_data_path[1]}")
+
+    # Training
+    logger.info("Starting training")
+    print(f"Total Number of epochs: {num_epoch}")
     model = GNN_Bet(ninput=adj_size, nhid=hidden, dropout=0.6)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
-    loss = 9999999
+    loss = float('inf')
+
     for e in range(num_epoch):
         print(f"Epoch number: {e+1}/{num_epoch}")
-        train(device, adj_size, list_adj_train,list_adj_t_train,list_num_node_train,bc_mat_train, model, optimizer)
+        train(device, adj_size, list_adj_train, list_adj_t_train,
+              list_num_node_train, bc_mat_train, model, optimizer)
 
-        #to check test loss while training
         with torch.no_grad():
-            loss_epoch = test(device, adj_size, list_adj_test,list_adj_t_test,list_num_node_test,bc_mat_test, model, optimizer)
+            loss_epoch = test(device, adj_size, list_adj_test,
+                            list_adj_t_test, list_num_node_test, bc_mat_test, model, optimizer)
             if loss_epoch < loss:
-                loss = loss_epoch 
+                loss = loss_epoch
                 torch.save(model, model_path)
-                print(f"save the {e+1} epoch model to {model_path}...")
-
-
+                print(f"Saved model from epoch {e+1} to {model_path}")
 
 def inference_gnn_based_centrality(
-        graph_folder: str = "datasets/graphs/real_world",
-        graph_names: List[str] = ["GN.txt"],
-        centrality_folder: str = "datasets/centralities/gnn",
-        model_path: str = "models/MRL_6layer_1.pt",
-        adj_size: int = 100000
+        graph_folder: str,
+        graph_names: List[str],
+        centrality_folder: str,
+        model_path: str,
+        adj_size: int,
 ):
-    
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(device)
-    logger.info(f"model used for inference: {model_path}")
+    """Run inference using trained GNN model."""
+    device = get_device()
+    logger.info(f"Using device: {device}")
+    logger.info(f"Model used for inference: {model_path}")
+
     for graph_name in graph_names:
         graph_path = concat_path(graph_folder, graph_name)
         graph = preprocess(graph_path)
-    # 1: GRAPH
-        
-        model = torch.load(model_path)
-        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict([graph], num_copies = 1, adj_size= adj_size)
-        list_adj_test, list_adj_t_test = graph_to_adj_bet(list_graph, list_n_sequence, list_node_num, adj_size)
-        _, pre_arrs = inference(model, list_adj_test, list_adj_t_test, list_node_num, cent_mat, adj_size, device)
 
-        dest_value_path = concat_path(centrality_folder, get_file_without_extension_name(graph_name) + "_value.txt")
-        dest_ranking_path = concat_path(centrality_folder, get_file_without_extension_name(graph_name) + "_ranking.txt")
+        model = torch.load(model_path)
+        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict(
+            [graph], num_copies=1, adj_size=adj_size
+        )
+        list_adj_test, list_adj_t_test = graph_to_adj_bet(
+            list_graph, list_n_sequence, list_node_num, adj_size
+        )
+        _, pre_arrs = inference(
+            model, list_adj_test, list_adj_t_test, list_node_num, cent_mat,
+            adj_size, device
+        )
+
+        base_name = get_file_without_extension_name(graph_name)
+        dest_value_path = concat_path(centrality_folder, f"{base_name}_value.txt")
+        dest_ranking_path = concat_path(centrality_folder, f"{base_name}_ranking.txt")
 
         dest_dir = os.path.dirname(dest_value_path)
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
 
-        centrality_values = []
-        centrality_rankings = []
-        for index, item  in enumerate(pre_arrs[0]):
-            centrality_values.append((index,item))
-        centrality_rankings = (sorted(dict(centrality_values).items(), key=lambda item: item[1],reverse=True))
+        centrality_values = [(index, item) for index, item in enumerate(pre_arrs[0])]
+        centrality_rankings = sorted(dict(centrality_values).items(), key=lambda item: item[1], reverse=True)
 
         with open(dest_value_path, 'w') as f:
             for index_centrality_pair in centrality_values:
@@ -155,35 +180,28 @@ def inference_gnn_based_centrality(
                 f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
 def run_2_hop_labeling(
-        graph_folder: str = "datasets/graphs/real_world",
-        graph_names: Union[str, List[str]] = "GN.txt",  
-        centrality_folder: str = "datasets/centralities",
-        centrality_type: Literal['dc','bc','gnn'] = "gnn",  
-        algorithm_path: str = "pathbee/algorithms/2_hop_labeling.cpp",  
-        num_processes: int = 1  
-) -> None: 
-    """  
-    Run 2-hop labeling algorithm.  
-  
-    graph_paths: Path(s) to graph file(s).  
-    centrality_path: Path to centrality file.  
-    algorithm_path: Path to 2-hop labeling algorithm.  
-    num_processes: (Optional) Number of processes to start. Default is 1.  
-    """  
-    params = locals()
-    for param_name, param_value in params.items():  
-        print(f"{param_name}: {param_value}")  
-    # Compile the algorithm  
-    execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")  
-    
-    if isinstance(graph_names, str):  
-        graph_name = graph_names
-        cmd = f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, centrality_type, get_file_without_extension_name(graph_name)+ '_ranking.txt')}"  
-        execute_command(cmd)
-    elif isinstance(graph_names, list):  
-        commands = [f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, centrality_type,get_file_without_extension_name(graph_name)+'_ranking.txt')}" for graph_name in graph_names]  
-        parallel_process(commands, num_processes)  
-    logger.info("-----------------------------------------------------------------------------")
+        graph_folder: str,
+        graph_names: Union[str, List[str]],
+        centrality_folder: str,
+        centrality_type: Literal['dc', 'bc', 'gnn'],
+        algorithm_path: str,
+        num_processes: int,
+):
+    """Run 2-hop labeling algorithm."""
+    # Compile the algorithm
+    execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")
+
+    if isinstance(graph_names, str):
+        graph_names = [graph_names]
+
+    commands = []
+    for graph_name in graph_names:
+        base_name = get_file_without_extension_name(graph_name)
+        cmd = f"./2_hop_labeling {concat_path(graph_folder, graph_name)} {concat_path(centrality_folder, centrality_type, f'{base_name}_ranking.txt')}"
+        commands.append(cmd)
+
+    parallel_process(commands, num_processes)
+    logger.info("2-hop labeling completed")
 
 command_map = {
     "gen": gen_dataset,
@@ -192,8 +210,23 @@ command_map = {
     "indexing": run_2_hop_labeling,
 }
 
-def main(command: str = "pll", *args, **kwargs):
-    command_map[command](*args, **kwargs)
+def main(command: str = "pll", config_path: str = "config.json"):
+    """Main entry point for the application."""
+    if command not in command_map:
+        raise ValueError(f"Unknown command: {command}. Available commands: {list(command_map.keys())}")
+    
+    # Load configuration
+    config = load_config(config_path)
+    
+    # Call the appropriate function with its parameters
+    if command == "gen":
+        gen_dataset(**config['gen'])
+    elif command == "train":
+        train_gnn(**config['train'])
+    elif command == "infer":
+        inference_gnn_based_centrality(**config['infer'])
+    elif command == "indexing":
+        run_2_hop_labeling(**config['indexing'])
 
 if __name__ == "__main__":
     logger.info("START EXECUTE CODE************************")

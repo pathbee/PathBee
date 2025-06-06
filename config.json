@@ -1,0 +1,34 @@
+{
+    "gen": {
+        "num_of_graphs": 5,
+        "num_train": 4,
+        "num_test": 1,
+        "num_copies": 50,
+        "graph_type": "SF",
+        "dataset_folder": "datasets/graphs/synthetic/",
+        "num_nodes": 100000,
+        "adj_size": 1000000
+    },
+    "train": {
+        "dataset_folder": "datasets/graphs/synthetic/",
+        "adj_size": 1000000,
+        "hidden": 12,
+        "num_epoch": 10,
+        "model_path": "models/model.pt"
+    },
+    "infer": {
+        "graph_folder": "datasets/graphs/real_world",
+        "graph_names": ["GN.txt"],
+        "centrality_folder": "datasets/centralities/gnn",
+        "model_path": "models/MRL_6layer_1.pt",
+        "adj_size": 1000000
+    },
+    "indexing": {
+        "graph_folder": "datasets/graphs/real_world",
+        "graph_names": ["GN.txt"],
+        "centrality_folder": "datasets/centralities",
+        "centrality_type": "gnn",
+        "algorithm_path": "pathbee/algorithms/2_hop_labeling.cpp",
+        "num_processes": 1
+    }
+} 

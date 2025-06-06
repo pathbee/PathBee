@@ -69,29 +69,3 @@ def get_split(source_file,num_train,num_test,num_copies,adj_size,save_path):
 
     with open(os.path.join(save_path,"test.pickle"),"wb") as fopen:
         pickle.dump([list_graph,list_n_sequence,list_node_num,cent_mat],fopen, protocol=4)
-
-#creating training/test dataset split for the model
-# adj_size = 4500000
-# graph_type = "SF"
-# num_train = 4
-# num_test = 1
-
-# #Number of permutations for node sequence
-# num_copies = 50
-
-# #Total number of training graphs = 5*50 = 250
-
-# print("Loading graphs from pickle files...")
-# # TODO : relative path
-# bet_source_file = "./graphs/synthetic/"+ graph_type + "_data_bet.pickle"
-
-# #paths for saving splits
-# save_path_bet = "./graphs/synthetic/"+graph_type
-
-
-# #save betweenness split
-# get_split(bet_source_file,num_train,num_test,num_copies,adj_size,save_path_bet)
-
-# #save closeness split
-# # get_split(close_source_file,num_train,num_test,num_copies,adj_size,save_path_close)
-# print(" Data split saved.")
