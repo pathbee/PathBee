@@ -41,6 +41,21 @@ class PrunedLandmarkLabeling {
   // Load the index from a file
   bool LoadIndex(const char* filename);
 
+  // Get the number of items in inIndex[v] and outIndex[v]
+  std::pair<int, int> GetNumIndexItems(int v) const {
+    if (v < 0 || v >= num_v_) return {0, 0};
+    int in_count = 0, out_count = 0;
+    if (inIndex[v].spt_v) {
+      while (inIndex[v].spt_v[in_count] != num_v_) ++in_count;
+      ++in_count; // include sentinel
+    }
+    if (outIndex[v].spt_v) {
+      while (outIndex[v].spt_v[out_count] != num_v_) ++out_count;
+      ++out_count; // include sentinel
+    }
+    return {in_count, out_count};
+  }
+
   PrunedLandmarkLabeling()
       : num_v_(0), inIndex(NULL), outIndex(NULL), time_load_(0), time_indexing_(0) {} //tip
   virtual ~PrunedLandmarkLabeling() {

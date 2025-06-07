@@ -7,6 +7,7 @@ import argparse
 import json
 from typing import List, Union, Literal
 from pathlib import Path
+import subprocess
 
 logger = get_logger()
 
@@ -128,9 +129,9 @@ def train_gnn(
                 torch.save(model, model_path)
                 print(f"Saved model from epoch {e+1} to {model_path}")
 
-def inference_gnn_based_centrality(
+def inference_gnn(
         graph_path: str,
-        save_folder: str,
+        save_dir: str,
         model_path: str,
         adj_size: int,
 ):
@@ -154,8 +155,8 @@ def inference_gnn_based_centrality(
         adj_size, device
     )
 
-    dest_value_path = concat_path(save_folder, f"gnn_value.txt")
-    dest_ranking_path = concat_path(save_folder, f"gnn_ranking.txt")
+    dest_value_path = concat_path(save_dir, f"gnn_value.txt")
+    dest_ranking_path = concat_path(save_dir, f"gnn_ranking.txt")
 
     dest_dir = os.path.dirname(dest_value_path)
     Path(dest_dir).mkdir(parents=True, exist_ok=True)
@@ -182,7 +183,7 @@ def run_2_hop_labeling(
     # Compile and run
     execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")
     execute_command("chmod +x 2_hop_labeling")  
-    cmd = f"./2_hop_labeling {graph_path} {centrality_path} {index_path}"
+    cmd = f"./2_hop_labeling construct {graph_path} {centrality_path} {index_path}"
     parallel_process([cmd], num_processes)
     logger.info("2-hop labeling completed")
 
@@ -226,7 +227,7 @@ def setup_parser() -> argparse.ArgumentParser:
     infer_parser = subparsers.add_parser('infer', help='Run inference using trained GNN model')
     infer_parser.add_argument('--graph-path', type=str, required=True,
                             help='Path to the input graph file')
-    infer_parser.add_argument('--save-folder', type=str, required=True,
+    infer_parser.add_argument('--save-dir', type=str, required=True,
                             help='Path to save centrality results')
     infer_parser.add_argument('--model-path', type=str, default='models/MRL_6layer_1.pt',
                             help='Path to the trained model')
@@ -248,11 +249,11 @@ def setup_parser() -> argparse.ArgumentParser:
 
     # Query command
     query_parser = subparsers.add_parser('query', help='Query distance using constructed index')
-    query_parser.add_argument('--index-path', type=str, required=True, help='Path to the index file')
-    query_parser.add_argument('--start', type=int, required=True, help='Start vertex')
-    query_parser.add_argument('--end', type=int, required=True, help='End vertex')
-    query_parser.add_argument('--algorithm-path', type=str, default='pathbee/algorithms/query_distance.cpp',
-                             help='Path to the query_distance source code')
+    query_parser.add_argument('--index-path', type=str, nargs='+', required=True, help='Path(s) to the index file(s)')
+    query_parser.add_argument('--graph-path', type=str, help='Path to the graph file (required for plotting)')
+    query_parser.add_argument('--num-queries', type=int, default=100000, help='Number of random queries for distribution plot')
+    query_parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    query_parser.add_argument('--csv-output', type=str, default=None, help='Path to save the CSV file for query details')
 
     # Centrality command
     cen_parser = subparsers.add_parser('cen', help='Calculate centrality of a graph')
@@ -290,9 +291,9 @@ def main():
             model_path=args.model_path
         )
     elif args.command == 'infer':
-        inference_gnn_based_centrality(
+        inference_gnn(
             graph_path=args.graph_path,
-            save_folder=args.save_folder,
+            save_dir=args.save_dir,
             model_path=args.model_path,
             adj_size=args.adj_size
         )
@@ -305,12 +306,14 @@ def main():
             index_path=args.index_path
         )
     elif args.command == 'query':
-        # Compile and run query_distance if needed
-        execute_command(f"g++ {args.algorithm_path} -o query_distance")
-        execute_command("chmod +x query_distance")
-        cmd = f"./query_distance {args.index_path} {args.start} {args.end}"
-        result = os.popen(cmd).read()
-        print(result)
+        from scripts.distribution import generate_query_csv
+        generate_query_csv(
+            index_paths=args.index_path,
+            graph_path=args.graph_path,
+            num_queries=args.num_queries,
+            seed=args.seed,
+            csv_output=args.csv_output
+        )
 
     elif args.command == 'cen':
         # Call cal_centrality.py with the provided arguments
