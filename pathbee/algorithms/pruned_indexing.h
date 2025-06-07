@@ -35,6 +35,12 @@ class PrunedLandmarkLabeling {
   void Free();
   std::string Statistics();
 
+  // Store the index to a file
+  bool StoreIndex(const char* filename);
+
+  // Load the index from a file
+  bool LoadIndex(const char* filename);
+
   PrunedLandmarkLabeling()
       : num_v_(0), inIndex(NULL), outIndex(NULL), time_load_(0), time_indexing_(0) {} //tip
   virtual ~PrunedLandmarkLabeling() {
@@ -639,8 +645,146 @@ std::string PrunedLandmarkLabeling<kNumBitParallelRoots>
   return stats;
 }
 
+template<int kNumBitParallelRoots>
+bool PrunedLandmarkLabeling<kNumBitParallelRoots>
+::StoreIndex(const char* filename) {
+  std::ofstream ofs(filename, std::ios::binary);
+  if (!ofs) return false;
 
+  // Write number of vertices
+  ofs.write(reinterpret_cast<const char*>(&num_v_), sizeof(num_v_));
 
+  // Write inIndex
+  for (int v = 0; v < num_v_; ++v) {
+    // Write bit-parallel data
+    ofs.write(reinterpret_cast<const char*>(inIndex[v].bpspt_d), sizeof(inIndex[v].bpspt_d));
+    ofs.write(reinterpret_cast<const char*>(inIndex[v].bpspt_s), sizeof(inIndex[v].bpspt_s));
 
+    // Write SPT data
+    int spt_size = 0;
+    while (inIndex[v].spt_v[spt_size] != num_v_) spt_size++;
+    spt_size++; // Include sentinel
+
+    ofs.write(reinterpret_cast<const char*>(&spt_size), sizeof(spt_size));
+    ofs.write(reinterpret_cast<const char*>(inIndex[v].spt_v), spt_size * sizeof(uint32_t));
+    ofs.write(reinterpret_cast<const char*>(inIndex[v].spt_d), spt_size * sizeof(uint8_t));
+  }
+
+  // Write outIndex
+  for (int v = 0; v < num_v_; ++v) {
+    // Write bit-parallel data
+    ofs.write(reinterpret_cast<const char*>(outIndex[v].bpspt_d), sizeof(outIndex[v].bpspt_d));
+    ofs.write(reinterpret_cast<const char*>(outIndex[v].bpspt_s), sizeof(outIndex[v].bpspt_s));
+
+    // Write SPT data
+    int spt_size = 0;
+    while (outIndex[v].spt_v[spt_size] != num_v_) spt_size++;
+    spt_size++; // Include sentinel
+
+    ofs.write(reinterpret_cast<const char*>(&spt_size), sizeof(spt_size));
+    ofs.write(reinterpret_cast<const char*>(outIndex[v].spt_v), spt_size * sizeof(uint32_t));
+    ofs.write(reinterpret_cast<const char*>(outIndex[v].spt_d), spt_size * sizeof(uint8_t));
+  }
+
+  return ofs.good();
+}
+
+template<int kNumBitParallelRoots>
+bool PrunedLandmarkLabeling<kNumBitParallelRoots>
+::LoadIndex(const char* filename) {
+  std::ifstream ifs(filename, std::ios::binary);
+  if (!ifs) return false;
+
+  // Free existing index if any
+  Free();
+
+  // Read number of vertices
+  ifs.read(reinterpret_cast<char*>(&num_v_), sizeof(num_v_));
+  if (!ifs) return false;
+
+  // Allocate memory for inIndex and outIndex
+  inIndex = (inLabel*)memalign(64, num_v_ * sizeof(inLabel));
+  outIndex = (outLabel*)memalign(64, num_v_ * sizeof(outLabel));
+  if (!inIndex || !outIndex) {
+    Free();
+    return false;
+  }
+
+  // Initialize pointers to NULL
+  for (int v = 0; v < num_v_; ++v) {
+    inIndex[v].spt_v = NULL;
+    inIndex[v].spt_d = NULL;
+    outIndex[v].spt_v = NULL;
+    outIndex[v].spt_d = NULL;
+  }
+
+  // Read inIndex
+  for (int v = 0; v < num_v_; ++v) {
+    // Read bit-parallel data
+    ifs.read(reinterpret_cast<char*>(inIndex[v].bpspt_d), sizeof(inIndex[v].bpspt_d));
+    ifs.read(reinterpret_cast<char*>(inIndex[v].bpspt_s), sizeof(inIndex[v].bpspt_s));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+
+    // Read SPT data
+    int spt_size;
+    ifs.read(reinterpret_cast<char*>(&spt_size), sizeof(spt_size));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+
+    inIndex[v].spt_v = (uint32_t*)memalign(64, spt_size * sizeof(uint32_t));
+    inIndex[v].spt_d = (uint8_t*)memalign(64, spt_size * sizeof(uint8_t));
+    if (!inIndex[v].spt_v || !inIndex[v].spt_d) {
+      Free();
+      return false;
+    }
+
+    ifs.read(reinterpret_cast<char*>(inIndex[v].spt_v), spt_size * sizeof(uint32_t));
+    ifs.read(reinterpret_cast<char*>(inIndex[v].spt_d), spt_size * sizeof(uint8_t));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+  }
+
+  // Read outIndex
+  for (int v = 0; v < num_v_; ++v) {
+    // Read bit-parallel data
+    ifs.read(reinterpret_cast<char*>(outIndex[v].bpspt_d), sizeof(outIndex[v].bpspt_d));
+    ifs.read(reinterpret_cast<char*>(outIndex[v].bpspt_s), sizeof(outIndex[v].bpspt_s));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+
+    // Read SPT data
+    int spt_size;
+    ifs.read(reinterpret_cast<char*>(&spt_size), sizeof(spt_size));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+
+    outIndex[v].spt_v = (uint32_t*)memalign(64, spt_size * sizeof(uint32_t));
+    outIndex[v].spt_d = (uint8_t*)memalign(64, spt_size * sizeof(uint8_t));
+    if (!outIndex[v].spt_v || !outIndex[v].spt_d) {
+      Free();
+      return false;
+    }
+
+    ifs.read(reinterpret_cast<char*>(outIndex[v].spt_v), spt_size * sizeof(uint32_t));
+    ifs.read(reinterpret_cast<char*>(outIndex[v].spt_d), spt_size * sizeof(uint8_t));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+  }
+
+  return true;
+}
 
 #endif  // PRUNED_LANDMARK_LABELING_H_

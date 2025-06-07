@@ -1,7 +1,7 @@
 from pathbee.gnn.gen_datasets.create_dataset import *
 from pathbee.gnn.gen_datasets.generate_graph import *
 from pathbee.gnn.betweenness import *
-from pathbee.gnn.predict import *
+from pathbee.gnn.predict import preprocess, inference, create_dataset_for_predict
 
 import argparse
 import json
@@ -129,9 +129,8 @@ def train_gnn(
                 print(f"Saved model from epoch {e+1} to {model_path}")
 
 def inference_gnn_based_centrality(
-        graph_folder: str,
-        graph_names: List[str],
-        centrality_folder: str,
+        graph_path: str,
+        save_folder: str,
         model_path: str,
         adj_size: int,
 ):
@@ -140,51 +139,50 @@ def inference_gnn_based_centrality(
     logger.info(f"Using device: {device}")
     logger.info(f"Model used for inference: {model_path}")
 
-    for graph_name in graph_names:
-        graph_path = concat_path(graph_folder, graph_name)
-        graph = preprocess(graph_path)
 
-        model = torch.load(model_path)
-        list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict(
-            [graph], num_copies=1, adj_size=adj_size
-        )
-        list_adj_test, list_adj_t_test = graph_to_adj_bet(
-            list_graph, list_n_sequence, list_node_num, adj_size
-        )
-        _, pre_arrs = inference(
-            model, list_adj_test, list_adj_t_test, list_node_num, cent_mat,
-            adj_size, device
-        )
+    graph = preprocess(graph_path)
 
-        base_name = get_file_without_extension_name(graph_name)
-        dest_value_path = concat_path(centrality_folder, f"{base_name}_value.txt")
-        dest_ranking_path = concat_path(centrality_folder, f"{base_name}_ranking.txt")
+    model = torch.load(model_path)
+    list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict(
+        [graph], num_copies=1, adj_size=adj_size
+    )
+    list_adj_test, list_adj_t_test = graph_to_adj_bet(
+        list_graph, list_n_sequence, list_node_num, adj_size
+    )
+    _, pre_arrs = inference(
+        model, list_adj_test, list_adj_t_test, list_node_num, cent_mat,
+        adj_size, device
+    )
 
-        dest_dir = os.path.dirname(dest_value_path)
-        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+    dest_value_path = concat_path(save_folder, f"gnn_value.txt")
+    dest_ranking_path = concat_path(save_folder, f"gnn_ranking.txt")
 
-        centrality_values = [(index, item) for index, item in enumerate(pre_arrs[0])]
-        centrality_rankings = sorted(dict(centrality_values).items(), key=lambda item: item[1], reverse=True)
+    dest_dir = os.path.dirname(dest_value_path)
+    Path(dest_dir).mkdir(parents=True, exist_ok=True)
 
-        with open(dest_value_path, 'w') as f:
-            for index_centrality_pair in centrality_values:
-                f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
+    centrality_values = [(index, item) for index, item in enumerate(pre_arrs[0])]
+    centrality_rankings = sorted(dict(centrality_values).items(), key=lambda item: item[1], reverse=True)
 
-        with open(dest_ranking_path, 'w') as f:
-            for index_centrality_pair in centrality_rankings:
-                f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
+    with open(dest_value_path, 'w') as f:
+        for index_centrality_pair in centrality_values:
+            f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
+
+    with open(dest_ranking_path, 'w') as f:
+        for index_centrality_pair in centrality_rankings:
+            f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
 def run_2_hop_labeling(
         graph_path: str,
         centrality_path: str,
         algorithm_path: str,
         num_processes: int,
+        index_path: str,
 ):
     """Run 2-hop labeling algorithm."""
     # Compile and run
     execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")
-    execute_command("chmod +x 2_hop_labeling")
-    cmd = f"./2_hop_labeling {graph_path} {centrality_path}"
+    execute_command("chmod +x 2_hop_labeling")  
+    cmd = f"./2_hop_labeling {graph_path} {centrality_path} {index_path}"
     parallel_process([cmd], num_processes)
     logger.info("2-hop labeling completed")
 
@@ -226,19 +224,17 @@ def setup_parser() -> argparse.ArgumentParser:
 
     # Inference command
     infer_parser = subparsers.add_parser('infer', help='Run inference using trained GNN model')
-    infer_parser.add_argument('--graph-folder', type=str, default='datasets/graphs/real_world',
-                            help='Folder containing input graphs')
-    infer_parser.add_argument('--graph-names', type=str, nargs='+', default=['GN.txt'],
-                            help='Names of graph files to process')
-    infer_parser.add_argument('--centrality-folder', type=str, default='datasets/centralities/gnn',
-                            help='Folder to save centrality results')
+    infer_parser.add_argument('--graph-path', type=str, required=True,
+                            help='Path to the input graph file')
+    infer_parser.add_argument('--save-folder', type=str, required=True,
+                            help='Path to save centrality results')
     infer_parser.add_argument('--model-path', type=str, default='models/MRL_6layer_1.pt',
                             help='Path to the trained model')
     infer_parser.add_argument('--adj-size', type=int, default=1000000,
                             help='Size of adjacency matrix')
 
     # Indexing command
-    indexing_parser = subparsers.add_parser('indexing', help='Run 2-hop labeling algorithm')
+    indexing_parser = subparsers.add_parser('index', help='Run 2-hop labeling algorithm')
     indexing_parser.add_argument('--graph-path', type=str, required=True,
                                help='Path to the input graph file')
     indexing_parser.add_argument('--centrality-path', type=str, required=True,
@@ -247,6 +243,26 @@ def setup_parser() -> argparse.ArgumentParser:
                                help='Path to the 2-hop labeling algorithm source code')
     indexing_parser.add_argument('--num-processes', type=int, default=1,
                                help='Number of parallel processes to use')
+    indexing_parser.add_argument('--index-path', type=str, required=True,
+                               help='Path to the index file')
+
+    # Query command
+    query_parser = subparsers.add_parser('query', help='Query distance using constructed index')
+    query_parser.add_argument('--index-path', type=str, required=True, help='Path to the index file')
+    query_parser.add_argument('--start', type=int, required=True, help='Start vertex')
+    query_parser.add_argument('--end', type=int, required=True, help='End vertex')
+    query_parser.add_argument('--algorithm-path', type=str, default='pathbee/algorithms/query_distance.cpp',
+                             help='Path to the query_distance source code')
+
+    # Centrality command
+    cen_parser = subparsers.add_parser('cen', help='Calculate centrality of a graph')
+    cen_parser.add_argument('--graph-path', type=str, required=True, help='Path to the input graph file')
+    cen_parser.add_argument('--save-dir', type=str, required=True, help='Directory to save centrality results')
+    cen_parser.add_argument('--centrality', type=str, nargs='+', default=['bc'],
+                           help='Centrality type(s) to calculate (dc, bc, gs, kadabra, close, eigen)')
+    cen_parser.add_argument('--force', action='store_true', help='Force recalculation even if results exist')
+    cen_parser.add_argument('--python-path', type=str, default='python3', help='Python interpreter to use')
+    cen_parser.add_argument('--script-path', type=str, default='datasets/cal_centrality.py', help='Path to cal_centrality.py')
 
     return parser
 
@@ -275,19 +291,37 @@ def main():
         )
     elif args.command == 'infer':
         inference_gnn_based_centrality(
-            graph_folder=args.graph_folder,
-            graph_names=args.graph_names,
-            centrality_folder=args.centrality_folder,
+            graph_path=args.graph_path,
+            save_folder=args.save_folder,
             model_path=args.model_path,
             adj_size=args.adj_size
         )
-    elif args.command == 'indexing':
+    elif args.command == 'index':
         run_2_hop_labeling(
             graph_path=args.graph_path,
             centrality_path=args.centrality_path,
             algorithm_path=args.algorithm_path,
-            num_processes=args.num_processes
+            num_processes=args.num_processes,
+            index_path=args.index_path
         )
+    elif args.command == 'query':
+        # Compile and run query_distance if needed
+        execute_command(f"g++ {args.algorithm_path} -o query_distance")
+        execute_command("chmod +x query_distance")
+        cmd = f"./query_distance {args.index_path} {args.start} {args.end}"
+        result = os.popen(cmd).read()
+        print(result)
+
+    elif args.command == 'cen':
+        # Call cal_centrality.py with the provided arguments
+        cen_types = ' '.join([f'--centrality {c}' for c in args.centrality])
+        force_flag = '--force' if args.force else ''
+        cmd = (f"{args.python_path} {args.script_path} "
+               f"--graph-path {args.graph_path} "
+               f"--save-dir {args.save_dir} "
+               f"{cen_types} {force_flag}")
+        print(f"Running: {cmd}")
+        os.system(cmd)
     else:
         parser.print_help()
 
