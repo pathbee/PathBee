@@ -1,6 +1,8 @@
 #include "pruned_indexing.h"
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <chrono>
 
 using namespace std;
 
@@ -12,26 +14,21 @@ void construct_index(const string& graph_path, const string& centrality_path, co
     std::cout << stats << std::endl;
 }
 
-void query_distance(const string& index_path) {
+void query_distance(const string& index_path, const string& query_file, const string& output_file) {
     PrunedLandmarkLabeling<> pll;
     if (!pll.LoadIndex(index_path.c_str())) {
         cout << "Failed to load index from " << index_path << endl;
         return;
     }
-    cout << "Index loaded successfully. Number of vertices: " << pll.GetNumVertices() << endl;
-    cout << "Enter queries in format 'start end' (or -1 to exit):" << endl;
+    ifstream fin(query_file);
+    ofstream fout(output_file);
     int v, w;
-    while (true) {
-        cin >> v;
-        if (v == -1) break;
-        cin >> w;
-        if (w == -1) break;
+    while (fin >> v >> w) {
+        auto start = std::chrono::high_resolution_clock::now();
         int distance = pll.QueryDistance(v, w);
-        if (distance == INT_MAX) {
-            cout << "No path exists between vertices " << v << " and " << w << endl;
-        } else {
-            cout << "Distance between vertices " << v << " and " << w << " is: " << distance << endl;
-        }
+        auto end = std::chrono::high_resolution_clock::now();
+        double query_time = std::chrono::duration<double, std::micro>(end - start).count();
+        fout << v << ' ' << w << ' ' << distance << ' ' << query_time << '\n';
     }
 }
 
@@ -53,12 +50,31 @@ void query_index_items(const string& index_path) {
     }
 }
 
+void batch_query_distance(const string& index_path, const string& query_file, const string& output_file) {
+    PrunedLandmarkLabeling<> pll;
+    if (!pll.LoadIndex(index_path.c_str())) {
+        cout << "Failed to load index from " << index_path << endl;
+        return;
+    }
+    ifstream fin(query_file);
+    ofstream fout(output_file);
+    int v, w;
+    while (fin >> v >> w) {
+        auto start = std::chrono::high_resolution_clock::now();
+        int distance = pll.QueryDistance(v, w);
+        auto end = std::chrono::high_resolution_clock::now();
+        double query_time = std::chrono::duration<double, std::micro>(end - start).count();
+        fout << v << ' ' << w << ' ' << distance << ' ' << query_time << '\n';
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         cout << "Usage:\n"
              << "  " << argv[0] << " construct <graph_path> <centrality_path> <output_path>\n"
-             << "  " << argv[0] << " distance <index_file>\n"
-             << "  " << argv[0] << " index_items <index_file>\n";
+             << "  " << argv[0] << " distance <index_file> <query_file> <output_file>\n"
+             << "  " << argv[0] << " index_items <index_file>\n"
+             << "  " << argv[0] << " batch_distance <index_file> <query_file> <output_file>\n";
         return 1;
     }
 
@@ -71,17 +87,23 @@ int main(int argc, char** argv) {
         }
         construct_index(argv[2], argv[3], argv[4]);
     } else if (mode == "distance") {
-        if (argc != 3) {
-            cout << "Usage: " << argv[0] << " distance <index_file>\n";
+        if (argc != 5) {
+            cout << "Usage: " << argv[0] << " distance <index_file> <query_file> <output_file>\n";
             return 1;
         }
-        query_distance(argv[2]);
+        query_distance(argv[2], argv[3], argv[4]);
     } else if (mode == "index_items") {
         if (argc != 3) {
             cout << "Usage: " << argv[0] << " index_items <index_file>\n";
             return 1;
         }
         query_index_items(argv[2]);
+    } else if (mode == "batch_distance") {
+        if (argc != 5) {
+            cout << "Usage: " << argv[0] << " batch_distance <index_file> <query_file> <output_file>\n";
+            return 1;
+        }
+        batch_query_distance(argv[2], argv[3], argv[4]);
     } else {
         cout << "Unknown mode: " << mode << endl;
         return 1;

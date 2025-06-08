@@ -253,7 +253,7 @@ def setup_parser() -> argparse.ArgumentParser:
     query_parser.add_argument('--graph-path', type=str, help='Path to the graph file (required for plotting)')
     query_parser.add_argument('--num-queries', type=int, default=100000, help='Number of random queries for distribution plot')
     query_parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-    query_parser.add_argument('--csv-output', type=str, default=None, help='Path to save the CSV file for query details')
+    query_parser.add_argument('--result-dir', type=str, default=None, help='Path to save the CSV files for query details')
 
     # Centrality command
     cen_parser = subparsers.add_parser('cen', help='Calculate centrality of a graph')
@@ -264,6 +264,10 @@ def setup_parser() -> argparse.ArgumentParser:
     cen_parser.add_argument('--force', action='store_true', help='Force recalculation even if results exist')
     cen_parser.add_argument('--python-path', type=str, default='python3', help='Python interpreter to use')
     cen_parser.add_argument('--script-path', type=str, default='datasets/cal_centrality.py', help='Path to cal_centrality.py')
+
+    # Plot command
+    plot_parser = subparsers.add_parser('plot', help='Plot query time distribution from CSV(s)')
+    plot_parser.add_argument('--result-dir', type=str, required=True, help='Directory containing the CSV files to plot')
 
     return parser
 
@@ -312,7 +316,7 @@ def main():
             graph_path=args.graph_path,
             num_queries=args.num_queries,
             seed=args.seed,
-            csv_output=args.csv_output
+            result_dir=args.result_dir
         )
 
     elif args.command == 'cen':
@@ -325,6 +329,11 @@ def main():
                f"{cen_types} {force_flag}")
         print(f"Running: {cmd}")
         os.system(cmd)
+    elif args.command == 'plot':
+        from scripts.distribution import plot_query_time_distribution
+        plot_query_time_distribution(
+            result_dir=args.result_dir
+        )
     else:
         parser.print_help()
 
