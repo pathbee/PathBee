@@ -43,17 +43,7 @@ class PrunedLandmarkLabeling {
 
   // Get the number of items in inIndex[v] and outIndex[v]
   std::pair<int, int> GetNumIndexItems(int v) const {
-    if (v < 0 || v >= num_v_) return {0, 0};
-    int in_count = 0, out_count = 0;
-    if (inIndex[v].spt_v) {
-      while (inIndex[v].spt_v[in_count] != num_v_) ++in_count;
-      ++in_count; // include sentinel
-    }
-    if (outIndex[v].spt_v) {
-      while (outIndex[v].spt_v[out_count] != num_v_) ++out_count;
-      ++out_count; // include sentinel
-    }
-    return {in_count, out_count};
+    return {inIndex[v].num_items, outIndex[v].num_items};
   }
 
   PrunedLandmarkLabeling()
@@ -74,6 +64,7 @@ class PrunedLandmarkLabeling {
     uint64_t bpspt_s[kNumBitParallelRoots][2];  // [0]: S^{-1}, [1]: S^{0}
     uint32_t *spt_v;
     uint8_t *spt_d;
+    int num_items;
   } __attribute__((aligned(64)));  // Aligned for cache lines
 
   //out
@@ -82,6 +73,7 @@ class PrunedLandmarkLabeling {
     uint64_t bpspt_s[kNumBitParallelRoots][2];  // [0]: S^{-1}, [1]: S^{0}
     uint32_t *spt_v;
     uint8_t *spt_d;
+    int num_items;
   } __attribute__((aligned(64)));  // Aligned for cache lines
 
  
@@ -141,6 +133,7 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
   for (int v = 0; v < V; ++v) {
     inIndex[v].spt_v = NULL;
     inIndex[v].spt_d = NULL;
+    inIndex[v].num_items = 0;
   }
 
   //out
@@ -152,6 +145,7 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
   for (int v = 0; v < V; ++v) {
     outIndex[v].spt_v = NULL;
     outIndex[v].spt_d = NULL;
+    outIndex[v].num_items = 0;
   }
 
   //
@@ -549,6 +543,7 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
       search_space += k;
       spt_v_memory += k * sizeof(uint32_t);
       spt_d_memory += k * sizeof(uint8_t);
+      inIndex[inv[v]].num_items += k;
       inIndex[inv[v]].spt_v = (uint32_t*)memalign(64, k * sizeof(uint32_t));
       inIndex[inv[v]].spt_d = (uint8_t *)memalign(64, k * sizeof(uint8_t ));
       if (!inIndex[inv[v]].spt_v || !inIndex[inv[v]].spt_d) {
@@ -567,6 +562,7 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
       spt_v_memory += k * sizeof(uint32_t);
       spt_d_memory += k * sizeof(uint8_t);
       // cout << k << endl;
+      outIndex[inv[v]].num_items += k;
       outIndex[inv[v]].spt_v = (uint32_t*)memalign(64, k * sizeof(uint32_t));
       outIndex[inv[v]].spt_d = (uint8_t *)memalign(64, k * sizeof(uint8_t ));
       if (!outIndex[inv[v]].spt_v || !outIndex[inv[v]].spt_d) {
@@ -675,6 +671,9 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
     ofs.write(reinterpret_cast<const char*>(inIndex[v].bpspt_d), sizeof(inIndex[v].bpspt_d));
     ofs.write(reinterpret_cast<const char*>(inIndex[v].bpspt_s), sizeof(inIndex[v].bpspt_s));
 
+    // Write num_items
+    ofs.write(reinterpret_cast<const char*>(&inIndex[v].num_items), sizeof(inIndex[v].num_items));
+
     // Write SPT data
     int spt_size = 0;
     while (inIndex[v].spt_v[spt_size] != num_v_) spt_size++;
@@ -690,6 +689,9 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
     // Write bit-parallel data
     ofs.write(reinterpret_cast<const char*>(outIndex[v].bpspt_d), sizeof(outIndex[v].bpspt_d));
     ofs.write(reinterpret_cast<const char*>(outIndex[v].bpspt_s), sizeof(outIndex[v].bpspt_s));
+
+    // Write num_items
+    ofs.write(reinterpret_cast<const char*>(&outIndex[v].num_items), sizeof(outIndex[v].num_items));
 
     // Write SPT data
     int spt_size = 0;
@@ -743,6 +745,13 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
       return false;
     }
 
+    // Read num_items
+    ifs.read(reinterpret_cast<char*>(&inIndex[v].num_items), sizeof(inIndex[v].num_items));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+
     // Read SPT data
     int spt_size;
     ifs.read(reinterpret_cast<char*>(&spt_size), sizeof(spt_size));
@@ -771,6 +780,13 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
     // Read bit-parallel data
     ifs.read(reinterpret_cast<char*>(outIndex[v].bpspt_d), sizeof(outIndex[v].bpspt_d));
     ifs.read(reinterpret_cast<char*>(outIndex[v].bpspt_s), sizeof(outIndex[v].bpspt_s));
+    if (!ifs) {
+      Free();
+      return false;
+    }
+
+    // Read num_items
+    ifs.read(reinterpret_cast<char*>(&outIndex[v].num_items), sizeof(outIndex[v].num_items));
     if (!ifs) {
       Free();
       return false;

@@ -6,6 +6,53 @@
 
 using namespace std;
 
+class IndexManager {
+private:
+    PrunedLandmarkLabeling<> pll;
+    bool is_loaded = false;
+    string current_index_path;
+
+public:
+    bool loadIndex(const string& index_path) {
+        if (is_loaded && current_index_path == index_path) {
+            return true;
+        }
+        if (!pll.LoadIndex(index_path.c_str())) {
+            cout << "Failed to load index from " << index_path << endl;
+            return false;
+        }
+        is_loaded = true;
+        current_index_path = index_path;
+        return true;
+    }
+
+    pair<int, int> getIndexItems(int vertex_id) {
+        if (!is_loaded) {
+            cout << "Debug - Index not loaded!" << endl;
+            return make_pair(-1, -1);
+        }
+        if (vertex_id < 0 || vertex_id >= pll.GetNumVertices()) {
+            cout << "Debug - Invalid vertex ID: " << vertex_id << endl;
+            return make_pair(-1, -1);
+        }
+        return pll.GetNumIndexItems(vertex_id);
+    }
+
+    int queryDistance(int v, int w) {
+        if (!is_loaded) {
+            return -1;
+        }
+        return pll.QueryDistance(v, w);
+    }
+
+    int getNumVertices() {
+        return pll.GetNumVertices();
+    }
+};
+
+// Global index manager
+static IndexManager index_manager;
+
 void construct_index(const string& graph_path, const string& centrality_path, const string& output_path) {
     PrunedLandmarkLabeling<> pll;
     pll.ConstructIndex(graph_path, centrality_path);
@@ -15,9 +62,7 @@ void construct_index(const string& graph_path, const string& centrality_path, co
 }
 
 void query_distance(const string& index_path, const string& query_file, const string& output_file) {
-    PrunedLandmarkLabeling<> pll;
-    if (!pll.LoadIndex(index_path.c_str())) {
-        cout << "Failed to load index from " << index_path << endl;
+    if (!index_manager.loadIndex(index_path)) {
         return;
     }
     ifstream fin(query_file);
@@ -25,35 +70,40 @@ void query_distance(const string& index_path, const string& query_file, const st
     int v, w;
     while (fin >> v >> w) {
         auto start = std::chrono::high_resolution_clock::now();
-        int distance = pll.QueryDistance(v, w);
+        int distance = index_manager.queryDistance(v, w);
         auto end = std::chrono::high_resolution_clock::now();
         double query_time = std::chrono::duration<double, std::micro>(end - start).count();
         fout << v << ' ' << w << ' ' << distance << ' ' << query_time << '\n';
     }
 }
 
-void query_index_items(const string& index_path) {
-    PrunedLandmarkLabeling<> pll;
-    if (!pll.LoadIndex(index_path.c_str())) {
-        cout << "Failed to load index from " << index_path << endl;
+void query_index_items(const char* index_path, const char* vertex_file) {
+    if (!index_manager.loadIndex(index_path)) {
+        cerr << "Failed to load index from " << index_path << endl;
         return;
     }
-    cout << "Index loaded successfully. Number of vertices: " << pll.GetNumVertices() << endl;
-    cout << "Enter vertex id to query its index item count (or -1 to exit):" << endl;
-    int v;
-    while (true) {
-        cin >> v;
-        if (v == -1) break;
-        auto counts = pll.GetNumIndexItems(v);
-        cout << "Vertex " << v << ": inIndex items = " << counts.first
-             << ", outIndex items = " << counts.second << endl;
+
+    // Read vertices from file
+    ifstream fin(vertex_file);
+    if (!fin.is_open()) {
+        cerr << "Failed to open vertex file: " << vertex_file << endl;
+        return;
+    }
+
+    int vertex_id;
+    while (fin >> vertex_id) {
+        if (vertex_id >= index_manager.getNumVertices()) {
+            cerr << "Invalid vertex ID: " << vertex_id << endl;
+            continue;
+        }
+        auto counts = index_manager.getIndexItems(vertex_id);
+        cout << "Vertex " << vertex_id << ": in=" << counts.first 
+             << ", out=" << counts.second << endl;
     }
 }
 
 void batch_query_distance(const string& index_path, const string& query_file, const string& output_file) {
-    PrunedLandmarkLabeling<> pll;
-    if (!pll.LoadIndex(index_path.c_str())) {
-        cout << "Failed to load index from " << index_path << endl;
+    if (!index_manager.loadIndex(index_path)) {
         return;
     }
     ifstream fin(query_file);
@@ -61,7 +111,7 @@ void batch_query_distance(const string& index_path, const string& query_file, co
     int v, w;
     while (fin >> v >> w) {
         auto start = std::chrono::high_resolution_clock::now();
-        int distance = pll.QueryDistance(v, w);
+        int distance = index_manager.queryDistance(v, w);
         auto end = std::chrono::high_resolution_clock::now();
         double query_time = std::chrono::duration<double, std::micro>(end - start).count();
         fout << v << ' ' << w << ' ' << distance << ' ' << query_time << '\n';
@@ -73,7 +123,7 @@ int main(int argc, char** argv) {
         cout << "Usage:\n"
              << "  " << argv[0] << " construct <graph_path> <centrality_path> <output_path>\n"
              << "  " << argv[0] << " distance <index_file> <query_file> <output_file>\n"
-             << "  " << argv[0] << " index_items <index_file>\n"
+             << "  " << argv[0] << " index_items <index_file> <vertex_file>\n"
              << "  " << argv[0] << " batch_distance <index_file> <query_file> <output_file>\n";
         return 1;
     }
@@ -93,11 +143,11 @@ int main(int argc, char** argv) {
         }
         query_distance(argv[2], argv[3], argv[4]);
     } else if (mode == "index_items") {
-        if (argc != 3) {
-            cout << "Usage: " << argv[0] << " index_items <index_file>\n";
+        if (argc != 4) {
+            cout << "Usage: " << argv[0] << " index_items <index_file> <vertex_file>\n";
             return 1;
         }
-        query_index_items(argv[2]);
+        query_index_items(argv[2], argv[3]);
     } else if (mode == "batch_distance") {
         if (argc != 5) {
             cout << "Usage: " << argv[0] << " batch_distance <index_file> <query_file> <output_file>\n";

@@ -187,6 +187,14 @@ def run_2_hop_labeling(
     parallel_process([cmd], num_processes)
     logger.info("2-hop labeling completed")
 
+def add_query_args(parser):
+    parser.add_argument('--index-path', type=str, nargs='+', required=True, help='Path(s) to the index file(s)')
+    parser.add_argument('--graph-path', type=str, required=True, help='Path to the graph file')
+    parser.add_argument('--num-queries', type=int, default=100000, help='Number of random queries to perform')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--result-dir', type=str, default=None, help='Path to save the CSV files')
+    parser.add_argument('--stratified', action='store_true', help='Use stratified sampling (default: random sampling)')
+
 def setup_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='PathBee: Graph Neural Network for Path Queries')
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -249,11 +257,7 @@ def setup_parser() -> argparse.ArgumentParser:
 
     # Query command
     query_parser = subparsers.add_parser('query', help='Query distance using constructed index')
-    query_parser.add_argument('--index-path', type=str, nargs='+', required=True, help='Path(s) to the index file(s)')
-    query_parser.add_argument('--graph-path', type=str, help='Path to the graph file (required for plotting)')
-    query_parser.add_argument('--num-queries', type=int, default=100000, help='Number of random queries for distribution plot')
-    query_parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-    query_parser.add_argument('--result-dir', type=str, default=None, help='Path to save the CSV files for query details')
+    add_query_args(query_parser)
 
     # Centrality command
     cen_parser = subparsers.add_parser('cen', help='Calculate centrality of a graph')
@@ -264,10 +268,6 @@ def setup_parser() -> argparse.ArgumentParser:
     cen_parser.add_argument('--force', action='store_true', help='Force recalculation even if results exist')
     cen_parser.add_argument('--python-path', type=str, default='python3', help='Python interpreter to use')
     cen_parser.add_argument('--script-path', type=str, default='datasets/cal_centrality.py', help='Path to cal_centrality.py')
-
-    # Plot command
-    plot_parser = subparsers.add_parser('plot', help='Plot query time distribution from CSV(s)')
-    plot_parser.add_argument('--result-dir', type=str, required=True, help='Directory containing the CSV files to plot')
 
     return parser
 
@@ -312,11 +312,17 @@ def main():
     elif args.command == 'query':
         from scripts.distribution import generate_query_csv
         generate_query_csv(
-            index_paths=args.index_path,
-            graph_path=args.graph_path,
-            num_queries=args.num_queries,
-            seed=args.seed,
-            result_dir=args.result_dir
+            args.index_path,
+            args.graph_path,
+            args.num_queries,
+            args.seed,
+            args.result_dir,
+            args.stratified
+        )
+        from scripts.distribution import plot_query_time_distribution
+        plot_query_time_distribution(
+            result_dir=args.result_dir,
+            stratified=args.stratified
         )
 
     elif args.command == 'cen':
@@ -328,12 +334,7 @@ def main():
                f"--save-dir {args.save_dir} "
                f"{cen_types} {force_flag}")
         print(f"Running: {cmd}")
-        os.system(cmd)
-    elif args.command == 'plot':
-        from scripts.distribution import plot_query_time_distribution
-        plot_query_time_distribution(
-            result_dir=args.result_dir
-        )
+        os.system(cmd)  
     else:
         parser.print_help()
 

@@ -91,7 +91,7 @@ def execute_command(cmd: str) -> None:
     logger.info(f"start running {cmd}...")
     result = subprocess.run(cmd, shell=True, text=True, capture_output=True)   
     logger.info(result.stdout) 
-    logger.info(f"finish running {cmd}...\n")  
+    logger.info(f"End.")  
 
   
 def parallel_process(commands: List[str], num_processes: int) -> None:  
