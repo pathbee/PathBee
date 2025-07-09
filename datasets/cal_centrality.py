@@ -9,7 +9,7 @@ from typing import Tuple, List, Dict, Any, Callable
 def setup_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Calculate various centrality measures for graphs')
     parser.add_argument('--centrality', '-c', type=str, nargs='+', default=['bc'],
-                      choices=['dc', 'bc', 'gs', 'kadabra', 'close', 'eigen'],
+                      choices=['dc', 'bc', 'gs', 'rk', 'kadabra', 'close', 'eigen'],
                       help='Type of centrality to calculate (dc=degree, bc=betweenness, etc.). Can specify multiple.')
     parser.add_argument('--graph-path', '-g', type=str, required=True,
                       help='Path to the graph file')
@@ -89,6 +89,12 @@ def gs_betweenness_centrality(g_nk):
     GS_BC_ranking = temp.ranking()  
     return GS_BC_value, GS_BC_ranking
 
+def rk_betweenness_centrality(g_nk):
+    temp = nk.centrality.ApproxBetweenness(g_nk).run()  # Calculate Rk betweenness centrality
+    RK_BC_value = list(enumerate(temp.scores()))
+    RK_BC_ranking = temp.ranking()  
+    return RK_BC_value, RK_BC_ranking
+
 # Calculates the Kadabra betweenness centrality of a graph
 def kadabra_betweenness_centrality(g_nk):
     temp = nk.centrality.KadabraBetweenness(g_nk, err=0.01, delta=0.1).run()  # Calculate Kadabra betweenness centrality
@@ -126,6 +132,7 @@ centrality_dict = {
     'dc': degree_centrality,  # Degree centrality
     'bc': betweenness_centrality,  # Betweenness centrality
     'gs': gs_betweenness_centrality,  # GS Betweenness centrality
+    'rk': rk_betweenness_centrality,  # Rk Betweenness centrality
     'kadabra': kadabra_betweenness_centrality,  # Kadabra Betweenness centrality
     'close': closeness_centrality,  # Closeness centrality
     'eigen': eigenvector_centrality  # Eigenvector centrality

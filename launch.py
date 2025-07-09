@@ -310,7 +310,7 @@ def main():
             index_path=args.index_path
         )
     elif args.command == 'query':
-        from scripts.distribution import generate_query_csv
+        from scripts.query_distribution import generate_query_csv
         generate_query_csv(
             args.index_path,
             args.graph_path,
@@ -319,7 +319,7 @@ def main():
             args.result_dir,
             args.stratified
         )
-        from scripts.distribution import plot_query_time_distribution
+        from scripts.query_distribution import plot_query_time_distribution
         plot_query_time_distribution(
             result_dir=args.result_dir,
             stratified=args.stratified
