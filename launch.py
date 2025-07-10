@@ -73,6 +73,7 @@ def train_gnn(
     """Train GNN model."""
     device = get_device()
     logger.info(f"Using device: {device}")
+
     
     logger.info("Loading data...")
     pth_data_path = [
@@ -80,33 +81,52 @@ def train_gnn(
         os.path.join(dataset_folder, "data_test.pth")
     ]
     
+    # load training.pickle and test.pickle
     with open(os.path.join(dataset_folder, "training.pickle"), "rb") as fopen:
         list_graph_train, list_n_seq_train, list_num_node_train, bc_mat_train = pickle.load(fopen)
     with open(os.path.join(dataset_folder, "test.pickle"), "rb") as fopen:
         list_graph_test, list_n_seq_test, list_num_node_test, bc_mat_test = pickle.load(fopen)
+        
+    # if data_train.pth and data_test.pth exist, skip the following steps
+    if os.path.exists(pth_data_path[0]) and os.path.exists(pth_data_path[1]):
+        logger.info("Data already exists, skipping conversion to adjacency matrices")
+        # load data_train.pth and data_test.pth
+        data_train = torch.load(pth_data_path[0])
+        data_test = torch.load(pth_data_path[1])
+        list_adj_train = data_train['list_adj_train']
+        list_adj_t_train = data_train['list_adj_t_train']
+        list_adj_test = data_test['list_adj_test']
+        list_adj_t_test = data_test['list_adj_t_test']
+    
+    # check the dim of list_adj_train and list_adj_t_train, if it match the adj_size, skip the following steps
+    if list_adj_train[0].shape[0] == adj_size and list_adj_t_train[0].shape[0] == adj_size:
+        logger.info("Data already exists, skipping conversion to adjacency matrices")
+        return
+    else:
+        logger.info("Data does not exist, converting to adjacency matrices")
 
-    # Get adjacency matrices from graphs
-    logger.info("Converting graphs to adjacency matrices")
-    list_adj_train, list_adj_t_train = graph_to_adj_bet(
-        list_graph_train, list_n_seq_train, list_num_node_train, adj_size
-    )
-    list_adj_test, list_adj_t_test = graph_to_adj_bet(
-        list_graph_test, list_n_seq_test, list_num_node_test, adj_size
-    )
+        # Get adjacency matrices from graphs and save to data_train.pth and data_test.pth
+        logger.info("Converting graphs to adjacency matrices")
+        list_adj_train, list_adj_t_train = graph_to_adj_bet(
+            list_graph_train, list_n_seq_train, list_num_node_train, adj_size
+        )
+        list_adj_test, list_adj_t_test = graph_to_adj_bet(
+            list_graph_test, list_n_seq_test, list_num_node_test, adj_size
+        )
 
-    # Save adjacency matrices
-    data_train = {
-        'list_adj_train': list_adj_train,
-        'list_adj_t_train': list_adj_t_train
-    }
-    data_test = {
-        'list_adj_test': list_adj_test,
-        'list_adj_t_test': list_adj_t_test
-    }
+        # Save adjacency matrices
+        data_train = {
+            'list_adj_train': list_adj_train,
+            'list_adj_t_train': list_adj_t_train
+        }
+        data_test = {
+            'list_adj_test': list_adj_test,
+            'list_adj_t_test': list_adj_t_test
+        }
 
-    torch.save(data_train, pth_data_path[0])
-    torch.save(data_test, pth_data_path[1])
-    logger.info(f"Adjacency matrices saved to {pth_data_path[0]} and {pth_data_path[1]}")
+        torch.save(data_train, pth_data_path[0])
+        torch.save(data_test, pth_data_path[1])
+        logger.info(f"Adjacency matrices saved to {pth_data_path[0]} and {pth_data_path[1]}")
 
     # Training
     logger.info("Starting training")
@@ -201,9 +221,9 @@ def setup_parser() -> argparse.ArgumentParser:
 
     # Gen dataset command
     gen_parser = subparsers.add_parser('gen', help='Generate dataset for training and testing')
-    gen_parser.add_argument('--num-of-graphs', type=int, default=5,
+    gen_parser.add_argument('--num-of-graphs', type=int, default=2,
                           help='Number of graphs to generate')
-    gen_parser.add_argument('--num-train', type=int, default=4,
+    gen_parser.add_argument('--num-train', type=int, default=1,
                           help='Number of training graphs')
     gen_parser.add_argument('--num-test', type=int, default=1,
                           help='Number of test graphs')
@@ -215,18 +235,18 @@ def setup_parser() -> argparse.ArgumentParser:
                           help='Folder to save the dataset')
     gen_parser.add_argument('--num-nodes', type=int, default=100000,
                           help='Number of nodes in each graph')
-    gen_parser.add_argument('--adj-size', type=int, default=1000000,
+    gen_parser.add_argument('--adj-size', type=int, default=10000000,
                           help='Size of adjacency matrix')
 
     # Train command
     train_parser = subparsers.add_parser('train', help='Train GNN model')
     train_parser.add_argument('--dataset-folder', type=str, default='datasets/graphs/synthetic/',
                             help='Folder containing the dataset')
-    train_parser.add_argument('--adj-size', type=int, default=1000000,
+    train_parser.add_argument('--adj-size', type=int, default=10000000,
                             help='Size of adjacency matrix')
     train_parser.add_argument('--hidden', type=int, default=12,
                             help='Hidden layer size')
-    train_parser.add_argument('--num-epoch', type=int, default=10,
+    train_parser.add_argument('--num-epoch', type=int, default=2,
                             help='Number of training epochs')
     train_parser.add_argument('--model-path', type=str, default='models/model.pt',
                             help='Path to save the trained model')
@@ -239,7 +259,7 @@ def setup_parser() -> argparse.ArgumentParser:
                             help='Path to save centrality results')
     infer_parser.add_argument('--model-path', type=str, default='models/MRL_6layer_1.pt',
                             help='Path to the trained model')
-    infer_parser.add_argument('--adj-size', type=int, default=1000000,
+    infer_parser.add_argument('--adj-size', type=int, default=10000000,
                             help='Size of adjacency matrix')
 
     # Indexing command
