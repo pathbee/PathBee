@@ -20,8 +20,8 @@ def train(device, adj_size, list_adj_train,list_adj_t_train,list_num_node_train,
         adj = list_adj_train[i]
         num_nodes = list_num_node_train[i]
         adj_t = list_adj_t_train[i]
-        adj = adj.to(device)
-        adj_t = adj_t.to(device)
+        adj = adj.to(device, non_blocking=True)
+        adj_t = adj_t.to(device, non_blocking=True)
 
         optimizer.zero_grad()
             

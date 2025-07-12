@@ -2,6 +2,7 @@ from pathbee.gnn.gen_datasets.create_dataset import *
 from pathbee.gnn.gen_datasets.generate_graph import *
 from pathbee.gnn.betweenness import *
 from pathbee.gnn.predict import preprocess, inference, create_dataset_for_predict
+from multiprocessing import Pool, cpu_count
 
 import argparse
 import json
@@ -20,6 +21,31 @@ def get_device():
     else:
         return torch.device("cpu")
 
+def _generate_single_graph(args):
+    """Helper function for generating a single graph, used for parallel processing"""
+    graph_index, graph_type, num_nodes, seed_offset = args
+    
+    # Set random seed for current process, ensuring reproducibility
+    random.seed(10 + seed_offset + graph_index)
+    np.random.seed(10 + seed_offset + graph_index)
+    
+    try:
+        # Generate graph
+        g_nx = create_graph(graph_type, num_nodes)
+        
+        # Handle isolated nodes
+        if nx.number_of_isolates(g_nx) > 0:
+            g_nx.remove_nodes_from(list(nx.isolates(g_nx)))
+            g_nx = nx.convert_node_labels_to_integers(g_nx)
+        
+        # Calculate centrality
+        g_nkit = nx2nkit(g_nx)
+        bet_dict = cal_exact_bet(g_nkit)
+        
+        return graph_index, [g_nx, bet_dict], None
+    except Exception as e:
+        return graph_index, None, str(e)
+
 def gen_dataset(
         num_of_graphs: int,
         num_train: int,
@@ -30,29 +56,57 @@ def gen_dataset(
         num_nodes: int,
         adj_size: int,
 ):
-    """Generate dataset for training and testing."""
-    list_bet_data = list()
-    logger.info("Generating graphs and calculating centralities...")
+    """Generate dataset for training and testing. Default is to enable parallel optimization"""
     
-    for i in range(num_of_graphs):
-        print(f"Graph index:{i+1}/{num_of_graphs}", end='\r')
-        g_nx = create_graph(graph_type, num_nodes)
+    # Automatically select the optimal number of processes
+    n_processes = min(cpu_count(), max(1, num_of_graphs))
+    
+    list_bet_data = [None] * num_of_graphs  # Pre-allocate list
+    
+    if num_of_graphs > 1:
+        logger.info(f"Generating graphs and calculating centralities using {n_processes} processes...")
         
-        if nx.number_of_isolates(g_nx) > 0:
-            g_nx.remove_nodes_from(list(nx.isolates(g_nx)))
-            g_nx = nx.convert_node_labels_to_integers(g_nx)
+        # Prepare parameters
+        args_list = [(i, graph_type, num_nodes, 0) for i in range(num_of_graphs)]
+        
+        # Parallel processing
+        with Pool(n_processes) as pool:
+            # Use imap_unordered to get real-time progress feedback
+            results = pool.imap_unordered(_generate_single_graph, args_list)
             
-        g_nkit = nx2nkit(g_nx)
-        bet_dict = cal_exact_bet(g_nkit)
-        list_bet_data.append([g_nx, bet_dict])
-
+            completed = 0
+            for graph_index, graph_data, error in results:
+                completed += 1
+                print(f"Graph index:{completed}/{num_of_graphs}", end='\r')
+                
+                if error:
+                    logger.error(f"Error generating graph {graph_index}: {error}")
+                    raise RuntimeError(f"Failed to generate graph {graph_index}: {error}")
+                
+                list_bet_data[graph_index] = graph_data
+    else:
+        # When there is only one graph, process directly
+        logger.info("Generating graphs and calculating centralities...")
+        print(f"Graph index:1/{num_of_graphs}", end='\r')
+        
+        args = (0, graph_type, num_nodes, 0)
+        graph_index, graph_data, error = _generate_single_graph(args)
+        
+        if error:
+            logger.error(f"Error generating graph {graph_index}: {error}")
+            raise RuntimeError(f"Failed to generate graph {graph_index}: {error}")
+        
+        list_bet_data[0] = graph_data
+    
+    # Save raw data
     raw_data_path = os.path.join(dataset_folder, "raw_data.pickle")
     Path(dataset_folder).mkdir(parents=True, exist_ok=True)
-
     with open(raw_data_path, "wb") as fopen:
         pickle.dump(list_bet_data, fopen)
+    
     logger.info(f"\nRaw Graphs saved to {raw_data_path}, Now permutate graphs...")
-
+    
+    # Use optimized version of get_split
     get_split(
         raw_data_path,
         num_train,
@@ -61,7 +115,8 @@ def gen_dataset(
         adj_size,
         dataset_folder
     )
-    logger.info(f"Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle.")
+    
+    logger.info(f"Datasets saved to {dataset_folder}/training.pickle and {dataset_folder}/test.pickle")
 
 def train_gnn(
         dataset_folder: str,
@@ -101,7 +156,7 @@ def train_gnn(
     # check the dim of list_adj_train and list_adj_t_train, if it match the adj_size, skip the following steps
     if list_adj_train[0].shape[0] == adj_size and list_adj_t_train[0].shape[0] == adj_size:
         logger.info("Data already exists, skipping conversion to adjacency matrices")
-        return
+        pass
     else:
         logger.info("Data does not exist, converting to adjacency matrices")
 

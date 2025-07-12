@@ -390,65 +390,94 @@ def graph_to_adj_close(list_graph,list_n_sequence,list_node_num,model_size,print
     print("")        
     return list_adjacency,list_adjacency_mod
 
-def ranking_correlation(y_out,true_val,node_num,model_size):
-    y_out = y_out.reshape((model_size))
-    true_val = true_val.reshape((model_size))
+def ranking_correlation(y_out, true_val, node_num, model_size=None):
+    y_out = y_out.view(-1)
+    true_val = true_val.view(-1)
+
+    # 截断
+    y_out = y_out[:node_num]
+    true_val = true_val[:node_num]
 
     predict_arr = y_out.cpu().detach().numpy()
     true_arr = true_val.cpu().detach().numpy()
 
-
-    kt,_ = kendalltau(predict_arr[:node_num],true_arr[:node_num])
-
+    kt, _ = kendalltau(predict_arr, true_arr)
     return kt
 
 
-def loss_cal(y_out,true_val,num_nodes,device,model_size):
-   top_num = int(0.2 * num_nodes)
 
-   y_out = y_out.reshape((model_size))
-   true_val = true_val.reshape((model_size))
+def loss_cal(y_out, true_val, num_nodes, device, model_size):
+    top_num = int(0.2 * num_nodes)
 
-   _, order_y_true = torch.sort(-true_val[:num_nodes])
+    # Safely flatten (don't reshape to model_size)
+    y_out = y_out.view(-1)
+    true_val = true_val.view(-1)
 
-   sample_num1 = int(4*num_nodes)
-   sample_num2 = int(8*num_nodes)
-   sample_num3 = int(0*num_nodes)  
-  
-  # 15-15
-   ind_1 = torch.randint(0, top_num, (sample_num1, )).long().to(device)
-   ind_2 = torch.randint(0, top_num, (sample_num1, )).long().to(device)
-  # 15-85 
-   ind_3 = torch.randint(0, top_num, (sample_num2, )).long().to(device)
-   ind_4 = torch.randint(top_num, num_nodes, (sample_num2, )).long().to(device)
-  # 85-15
-   ind_5 = torch.randint(top_num, num_nodes, (sample_num2, )).long().to(device)
-   ind_6 = torch.randint(0, top_num, (sample_num2, )).long().to(device)
-  # 85-85
-   ind_7 = torch.randint(top_num, num_nodes, (sample_num3, )).long().to(device)
-   ind_8 = torch.randint(top_num, num_nodes, (sample_num3, )).long().to(device)
+    # Check consistency
+    assert y_out.shape[0] >= num_nodes, f"y_out too short: {y_out.shape[0]} < {num_nodes}"
+    assert true_val.shape[0] >= num_nodes, f"true_val too short: {true_val.shape[0]} < {num_nodes}"
 
-   ind_a = torch.cat((ind_1, ind_3, ind_5, ind_7))
-   ind_b = torch.cat((ind_2, ind_4, ind_6, ind_8))
+    # Sort by true_val
+    _, order_y_true = torch.sort(-true_val[:num_nodes])
 
-   rank_measure = torch.sign(-1 * (ind_a - ind_b)).float()
+    sample_num1 = int(4 * num_nodes)
+    sample_num2 = int(8 * num_nodes)
+    sample_num3 = int(0 * num_nodes)  # Optional
 
-   input_arr1 = y_out[:num_nodes][order_y_true[ind_a]].to(device)
-   input_arr2 = y_out[:num_nodes][order_y_true[ind_b]].to(device)
+    # Indices
+    ind_1 = torch.randint(0, top_num, (sample_num1,), device=device)
+    ind_2 = torch.randint(0, top_num, (sample_num1,), device=device)
 
-   loss_rank = torch.nn.MarginRankingLoss(margin=1.0).forward(input_arr1, input_arr2, rank_measure)
+    ind_3 = torch.randint(0, top_num, (sample_num2,), device=device)
+    ind_4 = torch.randint(top_num, num_nodes, (sample_num2,), device=device)
 
-   return loss_rank
+    ind_5 = torch.randint(top_num, num_nodes, (sample_num2,), device=device)
+    ind_6 = torch.randint(0, top_num, (sample_num2,), device=device)
+
+    ind_7 = torch.randint(top_num, num_nodes, (sample_num3,), device=device)
+    ind_8 = torch.randint(top_num, num_nodes, (sample_num3,), device=device)
+
+    ind_a = torch.cat((ind_1, ind_3, ind_5, ind_7))
+    ind_b = torch.cat((ind_2, ind_4, ind_6, ind_8))
+
+    rank_measure = torch.sign(-1 * (ind_a - ind_b)).float()
+
+    input_arr1 = y_out[:num_nodes][order_y_true[ind_a]]
+    input_arr2 = y_out[:num_nodes][order_y_true[ind_b]]
+
+    loss_rank = torch.nn.MarginRankingLoss(margin=1.0)(input_arr1, input_arr2, rank_measure)
+
+    return loss_rank
+
 
 def mse_loss(y_out, true_val, num_nodes, device, model_size):
-    y_out = y_out.reshape((model_size))
-    true_val = true_val.reshape((model_size))
-    input_arr1 = y_out[:num_nodes].to(device)
-    input_arr2 = true_val[:num_nodes].to(device)
-    # print(f"predict: {y_out[:10]}")
-    # print(f"true: {true_val[:10]}")
+    y_out = y_out.view(-1)
+    true_val = true_val.view(-1)
 
-    loss = torch.nn.MSELoss(reduction='sum').forward(input_arr1, input_arr2)
+    assert y_out.shape[0] >= num_nodes, f"y_out too short: {y_out.shape[0]} < {num_nodes}"
+    assert true_val.shape[0] >= num_nodes, f"true_val too short: {true_val.shape[0]} < {num_nodes}"
+
+    input_arr1 = y_out[:num_nodes]
+    input_arr2 = true_val[:num_nodes]
+
+    loss = torch.nn.MSELoss(reduction='sum')(input_arr1, input_arr2)
 
     return loss
 
+
+
+def sparse_mm_chunked(adj: torch.Tensor, weight: torch.Tensor, chunk_size: int = 128):
+    """
+    Perform sparse × dense matmul in chunks along columns of weight.
+    adj: sparse [N, D]
+    weight: dense [D, H]
+    return: dense [N, H]
+    """
+    outputs = []
+    D, H = weight.shape
+    for j in range(0, H, chunk_size):
+        end = min(j + chunk_size, H)
+        weight_chunk = weight[:, j:end]             # [D, chunk]
+        out_chunk = torch.spmm(adj, weight_chunk)   # [N, chunk]
+        outputs.append(out_chunk)
+    return torch.cat(outputs, dim=1)  # [N, H]
