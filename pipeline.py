@@ -45,7 +45,7 @@ def main():
         # random sampling
         run_cmd(f"python launch.py query --index-path bin/{graph_name.replace('.txt', '_dc.bin')} bin/{graph_name.replace('.txt', '_gnn.bin')} --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir}")
         # # stratified sampling
-        # run_cmd(f"python launch.py query --index-path bin/{graph_name.replace('.txt', '_dc.bin')} bin/{graph_name.replace('.txt', '_gnn.bin')} --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir} --stratified")
+        run_cmd(f"python launch.py query --index-path bin/{graph_name.replace('.txt', '_dc.bin')} bin/{graph_name.replace('.txt', '_gnn.bin')} --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir} --stratified")
 
 if __name__ == "__main__":
     main()

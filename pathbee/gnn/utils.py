@@ -42,16 +42,6 @@ def nkit_inedges(u,v,weight,edgeid):
 def nkit_outedges(u,v,weight,edgeid):
     all_out_dict[u].add(v)
 
-  
-def concat_path(*args):  
-    """  
-    Concatenates arbitrary number of path segments and returns the full path.  
-      
-    Parameters:  
-    *args: Arbitrary number of path segments  
-    """  
-    # Concatenate the path segments  
-    return os.path.join(*args)  
 
 def get_file_without_extension_name(full_path):
 

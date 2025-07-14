@@ -138,18 +138,16 @@ def train_gnn(
 
 def inference_gnn(
         graph_path: str,
-        save_dir: str,
         model_path: str,
         adj_size: int,
+        centrality_type: str = "pb",
 ):
     """Run inference using trained GNN model."""
     device = get_device()
     logger.info(f"Using device: {device}")
-    logger.info(f"Model used for inference: {model_path}")
-
-
+    logger.info(f"Model used for inference: {model_path}, load graph from {graph_path}")
     graph = preprocess(graph_path)
-
+    logger.info("Loading model")
     model = torch.load(model_path)
     list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict(
         [graph], num_copies=1, adj_size=adj_size
@@ -157,16 +155,18 @@ def inference_gnn(
     list_adj_test, list_adj_t_test = graph_to_adj_bet(
         list_graph, list_n_sequence, list_node_num, adj_size
     )
+    logger.info("Running inference...")
     _, pre_arrs = inference(
         model, list_adj_test, list_adj_t_test, list_node_num, cent_mat,
         adj_size, device
     )
-
-    dest_value_path = concat_path(save_dir, f"gnn_value.txt")
-    dest_ranking_path = concat_path(save_dir, f"gnn_ranking.txt")
-
-    dest_dir = os.path.dirname(dest_value_path)
-    Path(dest_dir).mkdir(parents=True, exist_ok=True)
+    logger.info("Inference completed")
+    import os
+    graph_base = os.path.splitext(os.path.basename(graph_path))[0]
+    dest_dir = os.path.join('result', graph_base)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest_value_path = os.path.join(dest_dir, f'{centrality_type}_value.txt')
+    dest_ranking_path = os.path.join(dest_dir, f'{centrality_type}_ranking.txt')
 
     centrality_values = [(index, item) for index, item in enumerate(pre_arrs[0])]
     centrality_rankings = sorted(dict(centrality_values).items(), key=lambda item: item[1], reverse=True)
@@ -218,7 +218,7 @@ def setup_parser() -> argparse.ArgumentParser:
                           help='Number of copies for each graph')
     gen_parser.add_argument('--graph-type', type=str, default='SF',
                           help='Type of graph to generate')
-    gen_parser.add_argument('--dataset-folder', type=str, default='datasets/graphs/synthetic/',
+    gen_parser.add_argument('--dataset-folder', type=str, default='dataset/synthetic',
                           help='Folder to save the dataset')
     gen_parser.add_argument('--num-nodes', type=int, default=100000,
                           help='Number of nodes in each graph')
@@ -227,7 +227,7 @@ def setup_parser() -> argparse.ArgumentParser:
 
     # Train command
     train_parser = subparsers.add_parser('train', help='Train GNN model')
-    train_parser.add_argument('--dataset-folder', type=str, default='datasets/graphs/synthetic/',
+    train_parser.add_argument('--dataset-folder', type=str, default='dataset/synthetic',
                             help='Folder containing the dataset')
     train_parser.add_argument('--adj-size', type=int, default=1000000,
                             help='Size of adjacency matrix')
@@ -239,17 +239,6 @@ def setup_parser() -> argparse.ArgumentParser:
                             help='Path to save the trained model')
     train_parser.add_argument('--loss-type', type=str, default='pb', choices=['pb', 'mrl', 'mse'],
                             help='Loss type to use for training (pb, mrl, mse)')
-
-    # Inference command
-    infer_parser = subparsers.add_parser('infer', help='Run inference using trained GNN model')
-    infer_parser.add_argument('--graph-path', type=str, required=True,
-                            help='Path to the input graph file')
-    infer_parser.add_argument('--save-dir', type=str, required=True,
-                            help='Path to save centrality results')
-    infer_parser.add_argument('--model-path', type=str, default='models/MRL_6layer_1.pt',
-                            help='Path to the trained model')
-    infer_parser.add_argument('--adj-size', type=int, default=1000000,
-                            help='Size of adjacency matrix')
 
     # Indexing command
     indexing_parser = subparsers.add_parser('index', help='Run 2-hop labeling algorithm')
@@ -271,14 +260,58 @@ def setup_parser() -> argparse.ArgumentParser:
     # Centrality command
     cen_parser = subparsers.add_parser('cen', help='Calculate centrality of a graph')
     cen_parser.add_argument('--graph-path', type=str, required=True, help='Path to the input graph file')
-    cen_parser.add_argument('--save-dir', type=str, required=True, help='Directory to save centrality results')
     cen_parser.add_argument('--centrality', type=str, nargs='+', default=['bc'],
-                           help='Centrality type(s) to calculate (dc, bc, gs, kadabra, close, eigen)')
+                           help='Centrality type(s) to calculate (dc, bc, gs, kadabra, close, eigen, gnn_pb, gnn_mrl, gnn_mse)')
     cen_parser.add_argument('--force', action='store_true', help='Force recalculation even if results exist')
     cen_parser.add_argument('--python-path', type=str, default='python3', help='Python interpreter to use')
     cen_parser.add_argument('--script-path', type=str, default='datasets/cal_centrality.py', help='Path to cal_centrality.py')
+    cen_parser.add_argument('--model-path', type=str, help='Path to the trained model (required for GNN centrality)')
+    cen_parser.add_argument('--adj-size', type=int, default=4500000, help='Size of adjacency matrix (for GNN centrality)')
 
     return parser
+
+def cal_centrality(
+        graph_path: str,
+        centrality_types: List[str],
+        model_path: str = None,
+        adj_size: int = 4500000,
+        force: bool = False,
+        python_path: str = "python3",
+        script_path: str = "dataset/cal_centrality.py",
+):
+    """Calculate centrality using either GNN inference or regular networkit/networkx methods."""
+    # Check if any centrality type contains "gnn"
+    gnn_centralities = [c for c in centrality_types if "gnn" in c.lower()]
+    regular_centralities = [c for c in centrality_types if "gnn" not in c.lower()]
+    
+    # Handle GNN centrality calculations
+    for centrality_type in gnn_centralities:
+        if not model_path:
+            logger.error(f"Model path is required for GNN centrality: {centrality_type}")
+            continue
+        logger.info(f"Running GNN inference for centrality: {centrality_type}")
+        inference_gnn(
+            graph_path=graph_path,
+            model_path=model_path,
+            adj_size=adj_size,
+            centrality_type=centrality_type
+        )
+    
+    # Handle regular centrality calculations
+    if regular_centralities:
+        cen_types = ' '.join([f'--centrality {c}' for c in regular_centralities])
+        force_flag = '--force' if force else ''
+        import os
+        graph_base = os.path.splitext(os.path.basename(graph_path))[0]
+        dest_dir = os.path.join('result', graph_base)
+        os.makedirs(dest_dir, exist_ok=True)
+        # Pass the new save-dir to the script
+        cmd = (f"{python_path} {script_path} "
+               f"--graph-path {graph_path} "
+               f"--save-dir {dest_dir} "
+               f"{cen_types} {force_flag}")
+        print(f"Running: {cmd}")
+        os.system(cmd)
 
 def main():
     parser = setup_parser()
@@ -304,13 +337,6 @@ def main():
             model_path=args.model_path,
             ltype=args.loss_type
         )
-    elif args.command == 'infer':
-        inference_gnn(
-            graph_path=args.graph_path,
-            save_dir=args.save_dir,
-            model_path=args.model_path,
-            adj_size=args.adj_size
-        )
     elif args.command == 'index':
         run_2_hop_labeling(
             graph_path=args.graph_path,
@@ -320,7 +346,7 @@ def main():
             index_path=args.index_path
         )
     elif args.command == 'query':
-        from scripts.query_distribution import generate_query_csv
+        from script.query_distribution import generate_query_csv
         generate_query_csv(
             args.index_path,
             args.graph_path,
@@ -329,22 +355,22 @@ def main():
             args.result_dir,
             args.stratified
         )
-        from scripts.query_distribution import plot_query_time_distribution
+        from script.query_distribution import plot_query_time_distribution
         plot_query_time_distribution(
             result_dir=args.result_dir,
             stratified=args.stratified
         )
 
     elif args.command == 'cen':
-        # Call cal_centrality.py with the provided arguments
-        cen_types = ' '.join([f'--centrality {c}' for c in args.centrality])
-        force_flag = '--force' if args.force else ''
-        cmd = (f"{args.python_path} {args.script_path} "
-               f"--graph-path {args.graph_path} "
-               f"--save-dir {args.save_dir} "
-               f"{cen_types} {force_flag}")
-        print(f"Running: {cmd}")
-        os.system(cmd)  
+        cal_centrality(
+            graph_path=args.graph_path,
+            centrality_types=args.centrality,
+            model_path=args.model_path,
+            adj_size=args.adj_size,
+            force=args.force,
+            python_path=args.python_path,
+            script_path=args.script_path
+        )
     else:
         parser.print_help()
 
