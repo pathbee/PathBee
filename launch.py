@@ -69,6 +69,7 @@ def train_gnn(
         hidden: int,
         num_epoch: int,
         model_path: str,
+        ltype: str = "pb",
 ):
     """Train GNN model."""
     device = get_device()
@@ -85,28 +86,34 @@ def train_gnn(
     with open(os.path.join(dataset_folder, "test.pickle"), "rb") as fopen:
         list_graph_test, list_n_seq_test, list_num_node_test, bc_mat_test = pickle.load(fopen)
 
-    # Get adjacency matrices from graphs
-    logger.info("Converting graphs to adjacency matrices")
-    list_adj_train, list_adj_t_train = graph_to_adj_bet(
-        list_graph_train, list_n_seq_train, list_num_node_train, adj_size
-    )
-    list_adj_test, list_adj_t_test = graph_to_adj_bet(
-        list_graph_test, list_n_seq_test, list_num_node_test, adj_size
-    )
+    if os.path.exists(pth_data_path[0]) and os.path.exists(pth_data_path[1]):
+        logger.info("Loading adjacency matrices from file")
+        data_train = torch.load(pth_data_path[0])
+        data_test = torch.load(pth_data_path[1])
+        list_adj_train = data_train['list_adj_train']
+        list_adj_t_train = data_train['list_adj_t_train']
+        list_adj_test = data_test['list_adj_test']
+        list_adj_t_test = data_test['list_adj_t_test']
+    else:
+        logger.info("Converting graphs to adjacency matrices")
+        list_adj_train, list_adj_t_train = graph_to_adj_bet(
+            list_graph_train, list_n_seq_train, list_num_node_train, adj_size
+        )
+        list_adj_test, list_adj_t_test = graph_to_adj_bet(
+            list_graph_test, list_n_seq_test, list_num_node_test, adj_size
+        )
+        data_train = {
+            'list_adj_train': list_adj_train,
+            'list_adj_t_train': list_adj_t_train
+        }
+        data_test = {
+            'list_adj_test': list_adj_test,
+            'list_adj_t_test': list_adj_t_test
+        }
+        torch.save(data_train, pth_data_path[0])
+        torch.save(data_test, pth_data_path[1])
+        logger.info(f"Adjacency matrices saved to {pth_data_path[0]} and {pth_data_path[1]}")
 
-    # Save adjacency matrices
-    data_train = {
-        'list_adj_train': list_adj_train,
-        'list_adj_t_train': list_adj_t_train
-    }
-    data_test = {
-        'list_adj_test': list_adj_test,
-        'list_adj_t_test': list_adj_t_test
-    }
-
-    torch.save(data_train, pth_data_path[0])
-    torch.save(data_test, pth_data_path[1])
-    logger.info(f"Adjacency matrices saved to {pth_data_path[0]} and {pth_data_path[1]}")
 
     # Training
     logger.info("Starting training")
@@ -119,11 +126,11 @@ def train_gnn(
     for e in range(num_epoch):
         print(f"Epoch number: {e+1}/{num_epoch}")
         train(device, adj_size, list_adj_train, list_adj_t_train,
-              list_num_node_train, bc_mat_train, model, optimizer)
+              list_num_node_train, bc_mat_train, model, optimizer, ltype)
 
         with torch.no_grad():
             loss_epoch = test(device, adj_size, list_adj_test,
-                            list_adj_t_test, list_num_node_test, bc_mat_test, model, optimizer)
+                            list_adj_t_test, list_num_node_test, bc_mat_test, model, optimizer, ltype)
             if loss_epoch < loss:
                 loss = loss_epoch
                 torch.save(model, model_path)
@@ -226,10 +233,12 @@ def setup_parser() -> argparse.ArgumentParser:
                             help='Size of adjacency matrix')
     train_parser.add_argument('--hidden', type=int, default=12,
                             help='Hidden layer size')
-    train_parser.add_argument('--num-epoch', type=int, default=10,
+    train_parser.add_argument('--num-epoch', type=int, default=7,
                             help='Number of training epochs')
     train_parser.add_argument('--model-path', type=str, default='models/model.pt',
                             help='Path to save the trained model')
+    train_parser.add_argument('--loss-type', type=str, default='pb', choices=['pb', 'mrl', 'mse'],
+                            help='Loss type to use for training (pb, mrl, mse)')
 
     # Inference command
     infer_parser = subparsers.add_parser('infer', help='Run inference using trained GNN model')
@@ -292,7 +301,8 @@ def main():
             adj_size=args.adj_size,
             hidden=args.hidden,
             num_epoch=args.num_epoch,
-            model_path=args.model_path
+            model_path=args.model_path,
+            ltype=args.loss_type
         )
     elif args.command == 'infer':
         inference_gnn(

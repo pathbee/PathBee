@@ -288,7 +288,7 @@ def get_logger(name: str = "pathbee", level: str = 'INFO', filename: str = 'path
         ch.setLevel(level)  
   
         # Create a formatter and add it to the handlers  
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')  
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')  
         fh.setFormatter(formatter)  
         ch.setFormatter(formatter)  
   
@@ -403,7 +403,7 @@ def ranking_correlation(y_out,true_val,node_num,model_size):
     return kt
 
 
-def loss_cal(y_out,true_val,num_nodes,device,model_size):
+def mrl_loss_sampling(y_out,true_val,num_nodes,device,model_size):
    top_num = int(0.2 * num_nodes)
 
    y_out = y_out.reshape((model_size))
@@ -427,6 +427,43 @@ def loss_cal(y_out,true_val,num_nodes,device,model_size):
   # 85-85
    ind_7 = torch.randint(top_num, num_nodes, (sample_num3, )).long().to(device)
    ind_8 = torch.randint(top_num, num_nodes, (sample_num3, )).long().to(device)
+
+   ind_a = torch.cat((ind_1, ind_3, ind_5, ind_7))
+   ind_b = torch.cat((ind_2, ind_4, ind_6, ind_8))
+
+   rank_measure = torch.sign(-1 * (ind_a - ind_b)).float()
+
+   input_arr1 = y_out[:num_nodes][order_y_true[ind_a]].to(device)
+   input_arr2 = y_out[:num_nodes][order_y_true[ind_b]].to(device)
+
+   loss_rank = torch.nn.MarginRankingLoss(margin=1.0).forward(input_arr1, input_arr2, rank_measure)
+
+   return loss_rank
+
+def mrl_loss(y_out,true_val,num_nodes,device,model_size):
+   top_num = int(0.2 * num_nodes)
+
+   y_out = y_out.reshape((model_size))
+   true_val = true_val.reshape((model_size))
+
+   _, order_y_true = torch.sort(-true_val[:num_nodes])
+
+   sample_num1 = int(4*num_nodes)
+   sample_num2 = int(8*num_nodes)
+   sample_num3 = int(0*num_nodes)  
+  
+  # 15-15
+   ind_1 = torch.randint(0, num_nodes, (sample_num1, )).long().to(device)
+   ind_2 = torch.randint(0, num_nodes, (sample_num1, )).long().to(device)
+  # 15-85 
+   ind_3 = torch.randint(0, num_nodes, (sample_num2, )).long().to(device)
+   ind_4 = torch.randint(0, num_nodes, (sample_num2, )).long().to(device)
+  # 85-15
+   ind_5 = torch.randint(0, num_nodes, (sample_num2, )).long().to(device) 
+   ind_6 = torch.randint(0, num_nodes, (sample_num2, )).long().to(device)
+  # 85-85
+   ind_7 = torch.randint(0, num_nodes, (sample_num3, )).long().to(device)
+   ind_8 = torch.randint(0, num_nodes, (sample_num3, )).long().to(device)
 
    ind_a = torch.cat((ind_1, ind_3, ind_5, ind_7))
    ind_b = torch.cat((ind_2, ind_4, ind_6, ind_8))
