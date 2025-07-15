@@ -1,23 +1,18 @@
 import argparse
 import os
 
-def process_graph(input_filepath: str, output_filepath: str = None):
+def process_graph(input_filepath: str):
     """
     Process a graph file by removing self-loops and reindexing nodes.
     
     Args:
         input_filepath (str): Path to the input graph file
-        output_filepath (str, optional): Path where the processed graph will be saved.
-            If not provided, will overwrite the original file.
-            If a directory is provided, will save with the same filename in that directory.
     """
-    # If no output path is provided, overwrite the original file
-    if output_filepath is None:
-        output_filepath = input_filepath
-    # If output path is a directory, use the input filename in that directory
-    elif os.path.isdir(output_filepath):
-        input_filename = os.path.basename(input_filepath)
-        output_filepath = os.path.join(output_filepath, input_filename)
+    # Generate output path in the same folder with "_processed" suffix
+    input_dir = os.path.dirname(input_filepath)
+    input_filename = os.path.basename(input_filepath)
+    name, ext = os.path.splitext(input_filename)
+    output_filepath = os.path.join(input_dir, f"{name}_processed{ext}")
 
     # Create output directory if it doesn't exist
     output_dir = os.path.dirname(output_filepath)
@@ -49,7 +44,11 @@ def process_graph(input_filepath: str, output_filepath: str = None):
         if len(parts) < 2:
             continue
             
+        # Handle both unweighted (src dest) and weighted (src dest weight) formats
         source, target = parts[0], parts[1]
+        # Check if this is a weighted graph (has 3 parts)
+        is_weighted = len(parts) >= 3
+        weight = parts[2] if is_weighted else None
         
         # Skip self-loops
         if source == target:
@@ -68,7 +67,10 @@ def process_graph(input_filepath: str, output_filepath: str = None):
             node_mapping[target] = len(node_mapping)
 
         # Write the reindexed edge to output file
-        output_file.write(f"{node_mapping[source]} {node_mapping[target]}\n")
+        if is_weighted:
+            output_file.write(f"{node_mapping[source]} {node_mapping[target]} {weight}\n")
+        else:
+            output_file.write(f"{node_mapping[source]} {node_mapping[target]}\n")
 
         # Update statistics
         max_index_before = max(max_index_before, int(source), int(target))
@@ -87,7 +89,6 @@ def process_graph(input_filepath: str, output_filepath: str = None):
 def main():
     parser = argparse.ArgumentParser(description='Process a graph file by removing self-loops and reindexing nodes.')
     parser.add_argument('--input', required=True, help='Path to the input graph file')
-    parser.add_argument('--output', help='Path where the processed graph will be saved (optional, defaults to overwriting the input file)')
     
     args = parser.parse_args()
     
@@ -96,7 +97,7 @@ def main():
         print(f"Error: Input file '{args.input}' does not exist")
         return
     
-    process_graph(args.input, args.output)
+    process_graph(args.input)
 
 if __name__ == "__main__":
     main()
