@@ -36,8 +36,8 @@ def main():
         # run_cmd(f"python launch.py infer --graph-path {graph_path} --save-dir {centrality_folder} --model-path models/model.pt --adj-size 4500000")
 
         # 3. Construct index (using dc and gnn centrality)
-        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path {centrality_folder}/dc_ranking.txt --index-path bin/{graph_name.replace('.txt', '_dc.bin')}")
-        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path {centrality_folder}/gnn_ranking.txt --index-path bin/{graph_name.replace('.txt', '_gnn.bin')}")
+        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path result/{graph_name.replace('.txt', '')}/dc/dc.txt --index-path bin/{graph_name.replace('.txt', '_dc.bin')}")
+        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path result/{graph_name.replace('.txt', '')}/gnn_pb/gnn_pb.txt --index-path bin/{graph_name.replace('.txt', '_gnn.bin')}")
 
         # 4. Query (example: plot/query time distribution) 
         result_dir = f"results/{graph_name}/"

@@ -88,16 +88,16 @@ def process_graph(input_filepath: str):
 
 def main():
     parser = argparse.ArgumentParser(description='Process a graph file by removing self-loops and reindexing nodes.')
-    parser.add_argument('--input', required=True, help='Path to the input graph file')
+    parser.add_argument('--graph', required=True, help='Path to the input graph file')
     
     args = parser.parse_args()
     
     # Validate input file exists
-    if not os.path.exists(args.input):
-        print(f"Error: Input file '{args.input}' does not exist")
+    if not os.path.exists(args.graph):
+        print(f"Error: Input file '{args.graph}' does not exist")
         return
     
-    process_graph(args.input)
+    process_graph(args.graph)
 
 if __name__ == "__main__":
     main()

@@ -28,8 +28,15 @@ def read_graph(map_path: str) -> Tuple[nx.DiGraph, nk.Graph]:
     try:
         with open(map_path, 'r') as f:
             for line in f:
-                src, dest = line.strip().split()
-                g_nx.add_edge(int(src), int(dest))
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    src, dest = int(parts[0]), int(parts[1])
+                    # Handle weighted graphs
+                    if len(parts) >= 3:
+                        weight = float(parts[2])
+                        g_nx.add_edge(src, dest, weight=weight)
+                    else:
+                        g_nx.add_edge(src, dest)
     except Exception as e:
         raise RuntimeError(f"Error reading graph file {map_path}: {str(e)}")
         
@@ -40,13 +47,14 @@ def read_graph(map_path: str) -> Tuple[nx.DiGraph, nk.Graph]:
 # Converts a NetworkX graph to a NetworKit graph
 def nx2nkit(g_nx):
     node_num = g_nx.number_of_nodes()
-    g_nkit = nk.Graph(directed=True)
+    g_nkit = nk.Graph(directed=True, weighted=True)
 
     for i in range(node_num):
         g_nkit.addNode()
 
-    for e1,e2 in g_nx.edges():
-        g_nkit.addEdge(e1,e2)   
+    for e1, e2, data in g_nx.edges(data=True):
+        weight = data.get('weight', 1.0)  # Default weight is 1.0 for unweighted edges
+        g_nkit.addEdge(e1, e2, weight)   
     return g_nkit
 
 # Returns all file names in the given directory.
@@ -155,12 +163,11 @@ def main():
         
         # Process each centrality type
         for centrality_type in args.centrality:
-            # Generate save paths using just the centrality type
-            value_path = os.path.join(args.save_dir, f"{centrality_type}_value.txt")
-            ranking_path = os.path.join(args.save_dir, f"{centrality_type}_ranking.txt")
+            # Generate save paths - only save ranking file with centrality name
+            ranking_path = os.path.join(args.save_dir, f"{centrality_type}.txt")
             
             # Skip if results exist and force flag is not set
-            if not args.force and os.path.exists(value_path) and os.path.exists(ranking_path):
+            if not args.force and os.path.exists(ranking_path):
                 print(f"Results for {centrality_type} already exist. Use --force to recalculate.")
                 continue
                 
@@ -171,11 +178,7 @@ def main():
                 centrality_func=centrality_dict[centrality_type]
             )
             
-            # Save value and ranking separately
-            with open(value_path, 'w') as f:
-                for item in centrality_value:
-                    f.write(f"{item[1]} {item[0]}\n")
-                    
+            # Save only ranking file
             with open(ranking_path, 'w') as f:
                 for item in centrality_ranking:
                     f.write(f"{item[1]} {item[0]}\n")

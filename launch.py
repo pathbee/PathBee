@@ -163,17 +163,12 @@ def inference_gnn(
     logger.info("Inference completed")
     import os
     graph_base = os.path.splitext(os.path.basename(graph_path))[0]
-    dest_dir = os.path.join('result', graph_base)
+    dest_dir = os.path.join('result', graph_base, centrality_type)
     os.makedirs(dest_dir, exist_ok=True)
-    dest_value_path = os.path.join(dest_dir, f'{centrality_type}_value.txt')
-    dest_ranking_path = os.path.join(dest_dir, f'{centrality_type}_ranking.txt')
+    dest_ranking_path = os.path.join(dest_dir, f'{centrality_type}.txt')
 
     centrality_values = [(index, item) for index, item in enumerate(pre_arrs[0])]
     centrality_rankings = sorted(dict(centrality_values).items(), key=lambda item: item[1], reverse=True)
-
-    with open(dest_value_path, 'w') as f:
-        for index_centrality_pair in centrality_values:
-            f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
 
     with open(dest_ranking_path, 'w') as f:
         for index_centrality_pair in centrality_rankings:
@@ -299,19 +294,22 @@ def cal_centrality(
     
     # Handle regular centrality calculations
     if regular_centralities:
-        cen_types = ' '.join([f'--centrality {c}' for c in regular_centralities])
-        force_flag = '--force' if force else ''
         import os
         graph_base = os.path.splitext(os.path.basename(graph_path))[0]
-        dest_dir = os.path.join('result', graph_base)
-        os.makedirs(dest_dir, exist_ok=True)
-        # Pass the new save-dir to the script
-        cmd = (f"{python_path} {script_path} "
-               f"--graph-path {graph_path} "
-               f"--save-dir {dest_dir} "
-               f"{cen_types} {force_flag}")
-        print(f"Running: {cmd}")
-        os.system(cmd)
+        
+        # Process each centrality type separately to create subdirectories
+        force_flag = '--force' if force else ''
+        for centrality_type in regular_centralities:
+            dest_dir = os.path.join('result', graph_base, centrality_type)
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            # Pass the new save-dir to the script
+            cmd = (f"{python_path} {script_path} "
+                   f"--graph-path {graph_path} "
+                   f"--save-dir {dest_dir} "
+                   f"--centrality {centrality_type} {force_flag}")
+            print(f"Running: {cmd}")
+            os.system(cmd)
 
 def main():
     parser = setup_parser()
