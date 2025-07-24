@@ -18,34 +18,33 @@ def run_cmd(cmd, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description='End-to-end pipeline for PathBee')
-    parser.add_argument('--graph-path', type=str, nargs='+', required=True, help='Path(s) to the graph file(s)')
+    parser.add_argument('--graph', type=str, nargs='+', required=True, help='Path(s) to the graph file(s)')
 
     args = parser.parse_args()
 
     run_cmd("g++ pathbee/algorithms/2_hop_labeling.cpp -o 2_hop_labeling")
 
-    for graph_path in args.graph_path:
+    for graph_path in args.graph:
         graph_name = os.path.basename(graph_path)
-        centrality_folder = os.path.join("datasets/centralities", graph_name)
-        os.makedirs(centrality_folder, exist_ok=True)
+        graph_base = os.path.splitext(graph_name)[0]  # Remove .txt extension
 
         # 1. Calculate centrality (dc)
-        # run_cmd(f"python launch.py cen --graph-path {graph_path} --save-dir {centrality_folder} --centrality dc")
+        run_cmd(f"python launch.py cen --graph-path {graph_path} --centrality dc")
 
         # # # 2. Inference
-        # run_cmd(f"python launch.py infer --graph-path {graph_path} --save-dir {centrality_folder} --model-path models/model.pt --adj-size 4500000")
+        # run_cmd(f"python launch.py cen --graph-path {graph_path} --centrality gnn_pb --model-path model/model_pb.pt --adj-size 4500000")
 
         # 3. Construct index (using dc and gnn centrality)
-        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path result/{graph_name.replace('.txt', '')}/dc/dc.txt --index-path bin/{graph_name.replace('.txt', '_dc.bin')}")
-        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path result/{graph_name.replace('.txt', '')}/gnn_pb/gnn_pb.txt --index-path bin/{graph_name.replace('.txt', '_gnn.bin')}")
+        run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path result/{graph_base}/dc.txt --index-path bin/{graph_base}_dc.bin")
+        # run_cmd(f"python launch.py index --graph-path {graph_path} --centrality-path result/{graph_base}/gnn_pb.txt --index-path bin/{graph_base}_gnn_pb.bin")
 
         # 4. Query (example: plot/query time distribution) 
-        result_dir = f"results/{graph_name}/"
-
+        result_dir = f"result/{graph_base}/"
+        
         # random sampling
-        run_cmd(f"python launch.py query --index-path bin/{graph_name.replace('.txt', '_dc.bin')} bin/{graph_name.replace('.txt', '_gnn.bin')} --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir}")
+        # run_cmd(f"python launch.py query --index-path bin/{graph_base}_dc.bin bin/{graph_base}_gnn_pb.bin --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir}")
         # # stratified sampling
-        run_cmd(f"python launch.py query --index-path bin/{graph_name.replace('.txt', '_dc.bin')} bin/{graph_name.replace('.txt', '_gnn.bin')} --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir} --stratified")
+        # run_cmd(f"python launch.py query --index-path bin/{graph_base}_dc.bin bin/{graph_base}_gnn_pb.bin --graph-path {graph_path} --num-queries 100000 --result-dir {result_dir} --stratified")
 
 if __name__ == "__main__":
     main()

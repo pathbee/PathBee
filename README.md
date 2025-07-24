@@ -30,9 +30,13 @@ PathBee
 
 ### Step 0: Prerequisites
 
-Ensure you're running Python 3.9 and CUDA 11.1 or higher. Install the necessary packages with:
+Ensure you're running Python 3.10 or higher. Install the necessary packages with:
 
 ```sh
+python create -n pb python=3.10
+
+pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
+
 pip install -r requirements.txt
 ```
 

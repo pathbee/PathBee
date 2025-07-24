@@ -19,6 +19,12 @@ def process_graph(input_filepath: str):
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # First, count total lines for progress tracking
+    print("Counting lines in input file...")
+    with open(input_filepath, "r") as f:
+        total_lines = sum(1 for line in f)
+    print(f"Total lines in input file: {total_lines:,}")
+
     # Open input and output files
     input_file = open(input_filepath, "r")
     output_file = open(output_filepath, "w")
@@ -32,11 +38,22 @@ def process_graph(input_filepath: str):
     max_index_after = -1
     num_lines_before = 0
     num_lines_after = 0
+    processed_lines = 0
 
+    print("Starting graph processing...")
+    
     # Process each line in the input file
     for index, row in enumerate(input_file.readlines()):
-        # Skip empty lines and header lines (starting with #)
-        if not row.strip() or row.strip().startswith('#'):
+        processed_lines += 1
+        
+        # Show progress every 100,0000 lines or every 1% of total lines
+        if processed_lines % max(1000000, total_lines // 100) == 0:
+            progress = (processed_lines / total_lines) * 100
+            print(f"Progress: {processed_lines:,}/{total_lines:,} lines ({progress:.1f}%) - "
+                  f"Processed edges: {num_lines_after:,}, Unique nodes: {len(node_mapping):,}")
+        
+        # Skip empty lines and header lines (starting with # or %)
+        if not row.strip() or row.strip().startswith('#') or row.strip().startswith('%'):
             continue
         
         # Split by both tab and space
@@ -81,9 +98,11 @@ def process_graph(input_filepath: str):
     input_file.close()
     output_file.close()
 
-    # Print processing statistics
-    print(f"Original max index: {max_index_before}, Original edge count: {num_lines_before}")
-    print(f"Processed max index: {max_index_after}, Processed edge count: {num_lines_after}")
+    # Print final processing statistics
+    print(f"\nProcessing completed!")
+    print(f"Original max index: {max_index_before:,}, Original edge count: {num_lines_before:,}")
+    print(f"Processed max index: {max_index_after:,}, Processed edge count: {num_lines_after:,}")
+    print(f"Unique nodes: {len(node_mapping):,}")
     print(f"Output saved to: {output_filepath}")
 
 def main():

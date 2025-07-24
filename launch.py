@@ -163,7 +163,7 @@ def inference_gnn(
     logger.info("Inference completed")
     import os
     graph_base = os.path.splitext(os.path.basename(graph_path))[0]
-    dest_dir = os.path.join('result', graph_base, centrality_type)
+    dest_dir = os.path.join('result', graph_base)
     os.makedirs(dest_dir, exist_ok=True)
     dest_ranking_path = os.path.join(dest_dir, f'{centrality_type}.txt')
 
@@ -181,13 +181,62 @@ def run_2_hop_labeling(
         num_processes: int,
         index_path: str,
 ):
-    """Run 2-hop labeling algorithm."""
+    """Run 2-hop labeling algorithm and collect statistics."""
+    import time
+    import os
+    
     # Compile and run
     execute_command(f"g++ {algorithm_path} -o 2_hop_labeling")
     execute_command("chmod +x 2_hop_labeling")  
+    
+    # Record start time
+    start_time = time.time()
+    print(f"Starting index construction for {os.path.basename(index_path)}...")
+    
     cmd = f"./2_hop_labeling construct {graph_path} {centrality_path} {index_path}"
-    parallel_process([cmd], num_processes)
-    logger.info("2-hop labeling completed")
+    result = parallel_process([cmd], num_processes)
+    
+    # Record end time
+    end_time = time.time()
+    indexing_time = end_time - start_time
+    
+    # Extract statistics from the output
+    index_size = 0
+    if result and len(result) > 0:
+        output = result[0] if isinstance(result, list) else str(result)
+        # Parse the statistics from the output
+        # Expected format: "index building time:X.XXXXXXs, index size:X.XXXXXXMB"
+        import re
+        time_match = re.search(r'index building time:([\d.]+)s', output)
+        size_match = re.search(r'index size:([\d.]+)MB', output)
+        
+        if time_match:
+            indexing_time = float(time_match.group(1))
+        if size_match:
+            index_size = float(size_match.group(1))
+    
+    # Get file size if index file exists
+    if os.path.exists(index_path):
+        file_size_mb = os.path.getsize(index_path) / (1024 * 1024)
+        index_size = max(index_size, file_size_mb)  # Use the larger of the two
+    
+    # Save statistics to result directory
+    graph_base = os.path.splitext(os.path.basename(graph_path))[0]
+    centrality_type = os.path.basename(centrality_path).replace('.txt', '')
+    result_dir = os.path.join('result', graph_base)
+    os.makedirs(result_dir, exist_ok=True)
+    
+    stats_file = os.path.join(result_dir, 'index_stats.txt')
+    with open(stats_file, 'a') as f:
+        f.write(f"Index: {index_path}\n")
+        f.write(f"Centrality: {centrality_type}\n")
+        f.write(f"Indexing time: {indexing_time:.6f}s\n")
+        f.write(f"Index size: {index_size:.6f}MB\n")
+        f.write("-" * 50 + "\n")
+    
+    print(f"Index construction completed for {os.path.basename(index_path)}. Time: {indexing_time:.6f}s, Size: {index_size:.6f}MB")
+    logger.info(f"2-hop labeling completed. Time: {indexing_time:.6f}s, Size: {index_size:.6f}MB")
+    return indexing_time, index_size
 
 def add_query_args(parser):
     parser.add_argument('--index-path', type=str, nargs='+', required=True, help='Path(s) to the index file(s)')
@@ -259,7 +308,7 @@ def setup_parser() -> argparse.ArgumentParser:
                            help='Centrality type(s) to calculate (dc, bc, gs, kadabra, close, eigen, gnn_pb, gnn_mrl, gnn_mse)')
     cen_parser.add_argument('--force', action='store_true', help='Force recalculation even if results exist')
     cen_parser.add_argument('--python-path', type=str, default='python3', help='Python interpreter to use')
-    cen_parser.add_argument('--script-path', type=str, default='datasets/cal_centrality.py', help='Path to cal_centrality.py')
+    cen_parser.add_argument('--script-path', type=str, default='dataset/cal_centrality.py', help='Path to cal_centrality.py')
     cen_parser.add_argument('--model-path', type=str, help='Path to the trained model (required for GNN centrality)')
     cen_parser.add_argument('--adj-size', type=int, default=4500000, help='Size of adjacency matrix (for GNN centrality)')
 
@@ -275,6 +324,14 @@ def cal_centrality(
         script_path: str = "dataset/cal_centrality.py",
 ):
     """Calculate centrality using either GNN inference or regular networkit/networkx methods."""
+    import time
+    import os
+    
+    # Get graph base name for result directory
+    graph_base = os.path.splitext(os.path.basename(graph_path))[0]
+    result_dir = os.path.join('result', graph_base)
+    os.makedirs(result_dir, exist_ok=True)
+    
     # Check if any centrality type contains "gnn"
     gnn_centralities = [c for c in centrality_types if "gnn" in c.lower()]
     regular_centralities = [c for c in centrality_types if "gnn" not in c.lower()]
@@ -284,32 +341,61 @@ def cal_centrality(
         if not model_path:
             logger.error(f"Model path is required for GNN centrality: {centrality_type}")
             continue
+        
         logger.info(f"Running GNN inference for centrality: {centrality_type}")
+        print(f"Starting GNN inference for {centrality_type}...")
+        start_time = time.time()
+        
         inference_gnn(
             graph_path=graph_path,
             model_path=model_path,
             adj_size=adj_size,
             centrality_type=centrality_type
         )
+        
+        end_time = time.time()
+        inference_time = end_time - start_time
+        
+        # Save timing statistics
+        stats_file = os.path.join(result_dir, 'index_stats.txt')
+        with open(stats_file, 'a') as f:
+            f.write(f"Centrality: {centrality_type}\n")
+            f.write(f"Type: GNN Inference\n")
+            f.write(f"Time: {inference_time:.6f}s\n")
+            f.write("-" * 50 + "\n")
+        
+        print(f"GNN inference completed for {centrality_type}. Time: {inference_time:.6f}s")
+        logger.info(f"GNN inference completed for {centrality_type}. Time: {inference_time:.6f}s")
     
     # Handle regular centrality calculations
     if regular_centralities:
-        import os
-        graph_base = os.path.splitext(os.path.basename(graph_path))[0]
-        
-        # Process each centrality type separately to create subdirectories
         force_flag = '--force' if force else ''
         for centrality_type in regular_centralities:
-            dest_dir = os.path.join('result', graph_base, centrality_type)
-            os.makedirs(dest_dir, exist_ok=True)
+            logger.info(f"Running regular centrality calculation for: {centrality_type}")
+            print(f"Starting regular centrality calculation for {centrality_type}...")
+            start_time = time.time()
             
             # Pass the new save-dir to the script
             cmd = (f"{python_path} {script_path} "
                    f"--graph-path {graph_path} "
-                   f"--save-dir {dest_dir} "
+                   f"--save-dir {result_dir} "
                    f"--centrality {centrality_type} {force_flag}")
             print(f"Running: {cmd}")
             os.system(cmd)
+            
+            end_time = time.time()
+            centrality_time = end_time - start_time
+            
+            # Save timing statistics
+            stats_file = os.path.join(result_dir, 'index_stats.txt')
+            with open(stats_file, 'a') as f:
+                f.write(f"Centrality: {centrality_type}\n")
+                f.write(f"Type: Regular Calculation\n")
+                f.write(f"Time: {centrality_time:.6f}s\n")
+                f.write("-" * 50 + "\n")
+            
+            print(f"Regular centrality calculation completed for {centrality_type}. Time: {centrality_time:.6f}s")
+            logger.info(f"Regular centrality calculation completed for {centrality_type}. Time: {centrality_time:.6f}s")
 
 def main():
     parser = setup_parser()
