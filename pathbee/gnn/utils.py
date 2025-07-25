@@ -11,6 +11,7 @@ from multiprocessing import Process, Queue
 import os  
 from typing import List
 import logging
+from torch_sparse import SparseTensor
 
 def get_out_edges(g_nkit,node_sequence):
     global all_out_dict
@@ -149,6 +150,19 @@ def clique_check(index,node_sequence,all_out_dict,all_in_dict):
     
     return True
 
+def scipy_to_sparse_tensor(coo_matrix) -> SparseTensor:
+    """Convert a scipy sparse matrix to a torch_sparse SparseTensor."""
+    if hasattr(coo_matrix, 'tocoo'):
+        coo = coo_matrix.tocoo()
+    else:
+        coo = coo_matrix
+    coo = coo.astype(np.float32)
+    row = torch.from_numpy(coo.row.astype(np.int64))
+    col = torch.from_numpy(coo.col.astype(np.int64))
+    val = torch.from_numpy(coo.data.astype(np.float32))
+    return SparseTensor(row=row, col=col, value=val,
+                       sparse_sizes=coo.shape).coalesce()
+
 def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     """Convert a scipy sparse matrix to a torch sparse tensor."""
     sparse_mx = sparse_mx.tocoo().astype(np.float32)
@@ -238,15 +252,15 @@ def graph_to_adj_bet(list_graph,list_n_sequence,list_node_num,model_size):
         #adding extra padding to adj mat,normalise and save as torch tensor
 
         adj_temp = csr_matrix(adj_temp)
-        adj_mat = sp.block_diag((top_mat,adj_temp,bottom_mat))
+        adj_mat_csr = sp.block_diag((top_mat,adj_temp,bottom_mat))
         
         adj_temp_t = csr_matrix(adj_temp_t)
-        adj_mat_t = sp.block_diag((top_mat,adj_temp_t,bottom_mat))
+        adj_mat_t_csr = sp.block_diag((top_mat,adj_temp_t,bottom_mat))
         
-        adj_mat = sparse_mx_to_torch_sparse_tensor(adj_mat)
+        adj_mat = scipy_to_sparse_tensor(adj_mat_csr.tocoo())
+        adj_mat_t = scipy_to_sparse_tensor(adj_mat_t_csr.tocoo())
+        
         list_adjacency.append(adj_mat)
-        
-        adj_mat_t = sparse_mx_to_torch_sparse_tensor(adj_mat_t)
         list_adjacency_t.append(adj_mat_t)
     print("", flush=True)          
     return list_adjacency,list_adjacency_t
@@ -365,16 +379,16 @@ def graph_to_adj_close(list_graph,list_n_sequence,list_node_num,model_size,print
         #adding extra padding to adj mat,normalise and save as torch tensor
         
         adj_temp = csr_matrix(adj_temp)
-        adj_mat = sp.block_diag((top_mat,adj_temp,bottom_mat))
+        adj_mat_csr = sp.block_diag((top_mat,adj_temp,bottom_mat))
         
         adj_temp_mod = csr_matrix(adj_temp_mod)
-        adj_mat_mod = sp.block_diag((top_mat,adj_temp_mod,bottom_mat))
+        adj_mat_mod_csr = sp.block_diag((top_mat,adj_temp_mod,bottom_mat))
 
         
-        adj_mat = sparse_mx_to_torch_sparse_tensor(adj_mat)
-        list_adjacency.append(adj_mat)
+        adj_mat = scipy_to_sparse_tensor(adj_mat_csr.tocoo())
+        adj_mat_mod = scipy_to_sparse_tensor(adj_mat_mod_csr.tocoo())
         
-        adj_mat_mod = sparse_mx_to_torch_sparse_tensor(adj_mat_mod)
+        list_adjacency.append(adj_mat)
         list_adjacency_mod.append(adj_mat_mod)
 
     print("")        

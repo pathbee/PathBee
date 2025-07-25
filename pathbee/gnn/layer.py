@@ -29,7 +29,7 @@ class GNN_Layer(Module):
 
     def forward(self, input, adj):
         support = torch.mm(input, self.weight)
-        output = torch.spmm(adj, support)
+        output = adj.matmul(support)
 
         if self.bias is not None:
             return output + self.bias
@@ -65,7 +65,7 @@ class GNN_Layer_Init(Module):
 
     def forward(self, adj):
         support = self.weight
-        output = torch.spmm(adj, support)
+        output = adj.matmul(support)
         if self.bias is not None:
             return output + self.bias
         else:
