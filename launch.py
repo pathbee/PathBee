@@ -80,6 +80,7 @@ def train_gnn(
         os.path.join(dataset_folder, "data_train.pth"),
         os.path.join(dataset_folder, "data_test.pth")
     ]
+    print(f"pth_data_path: {pth_data_path}")
     
     with open(os.path.join(dataset_folder, "training.pickle"), "rb") as fopen:
         list_graph_train, list_n_seq_train, list_num_node_train, bc_mat_train = pickle.load(fopen)
@@ -95,6 +96,12 @@ def train_gnn(
         list_adj_test = data_test['list_adj_test']
         list_adj_t_test = data_test['list_adj_t_test']
     else:
+        print(f"list_graph_train: {len(list_graph_train)}")
+        print(f"list_graph_test: {len(list_graph_test)}")
+        print(f"list_n_seq_train: {len(list_n_seq_train)}")
+        print(f"list_n_seq_test: {len(list_n_seq_test)}")
+        print(f"list_num_node_train: {len(list_num_node_train)}")
+        print(f"list_num_node_test: {len(list_num_node_test)}")
         logger.info("Converting graphs to adjacency matrices")
         list_adj_train, list_adj_t_train = graph_to_adj_bet(
             list_graph_train, list_n_seq_train, list_num_node_train, adj_size
@@ -120,7 +127,7 @@ def train_gnn(
     print(f"Total Number of epochs: {num_epoch}")
     model = GNN_Bet(ninput=adj_size, nhid=hidden, dropout=0.6)
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9)
     loss = float('inf')
 
     for e in range(num_epoch):
@@ -136,43 +143,77 @@ def train_gnn(
                 torch.save(model, model_path)
                 print(f"Saved model from epoch {e+1} to {model_path}")
 
-def inference_gnn(
-        graph_path: str,
-        model_path: str,
-        adj_size: int,
-        centrality_type: str = "pb",
-):
-    """Run inference using trained GNN model."""
-    device = get_device()
-    logger.info(f"Using device: {device}")
-    logger.info(f"Model used for inference: {model_path}, load graph from {graph_path}")
+def prepare_graph_for_inference(graph_path: str, adj_size: int):
+    """
+    Preprocess the graph and save the input data required for inference
+    to the same directory as the graph.
+    """
+    logger.info(f"Preprocessing graph from {graph_path}")
     graph = preprocess(graph_path)
-    logger.info("Loading model")
-    model = torch.load(model_path)
     list_graph, list_n_sequence, list_node_num, cent_mat = create_dataset_for_predict(
         [graph], num_copies=1, adj_size=adj_size
     )
     list_adj_test, list_adj_t_test = graph_to_adj_bet(
         list_graph, list_n_sequence, list_node_num, adj_size
     )
+
+    base_dir = os.path.splitext(graph_path)[0]  # e.g. path/to/graph.txt → path/to/graph
+    os.makedirs(base_dir, exist_ok=True)
+
+    save_path = os.path.join(base_dir, "inference_inputs.pkl")
+    with open(save_path, 'wb') as f:
+        pickle.dump({
+            "list_adj_test": list_adj_test,
+            "list_adj_t_test": list_adj_t_test,
+            "list_node_num": list_node_num,
+            "cent_mat": cent_mat,
+            "adj_size": adj_size
+        }, f)
+
+    logger.info(f"Saved preprocessed inputs to {save_path}")
+
+def inference_gnn(
+        graph_path: str,
+        model_path: str,
+        adj_size: int,
+        centrality_type: str = "pb",
+):
+    """
+    Load model and preprocessed inputs from graph_path's directory and run inference.
+    """
+    device = get_device()
+    logger.info(f"Using device: {device}")
+    logger.info(f"Loading model from {model_path}")
+    model = torch.load(model_path, map_location=device)
+
+    base_dir = os.path.splitext(graph_path)[0]
+    input_path = os.path.join(base_dir, "inference_inputs.pkl")
+
+    with open(input_path, 'rb') as f:
+        data = pickle.load(f)
+
+    list_adj_test = data["list_adj_test"]
+    list_adj_t_test = data["list_adj_t_test"]
+    list_node_num = data["list_node_num"]
+    cent_mat = data["cent_mat"]
+    adj_size = data["adj_size"]
+
     logger.info("Running inference...")
     _, pre_arrs = inference(
         model, list_adj_test, list_adj_t_test, list_node_num, cent_mat,
         adj_size, device
     )
     logger.info("Inference completed")
-    import os
-    graph_base = os.path.splitext(os.path.basename(graph_path))[0]
-    dest_dir = os.path.join('result', graph_base)
-    os.makedirs(dest_dir, exist_ok=True)
-    dest_ranking_path = os.path.join(dest_dir, f'{centrality_type}.txt')
 
+    dest_ranking_path = os.path.join(base_dir, f'{centrality_type}.txt')
     centrality_values = [(index, item) for index, item in enumerate(pre_arrs[0])]
     centrality_rankings = sorted(dict(centrality_values).items(), key=lambda item: item[1], reverse=True)
 
     with open(dest_ranking_path, 'w') as f:
         for index_centrality_pair in centrality_rankings:
             f.write(f"{index_centrality_pair[1]} {index_centrality_pair[0]}\n")
+
+    logger.info(f"Ranking saved to {dest_ranking_path}")
 
 def run_2_hop_labeling(
         graph_path: str,
@@ -266,16 +307,16 @@ def setup_parser() -> argparse.ArgumentParser:
                           help='Folder to save the dataset')
     gen_parser.add_argument('--num-nodes', type=int, default=100000,
                           help='Number of nodes in each graph')
-    gen_parser.add_argument('--adj-size', type=int, default=1000000,
+    gen_parser.add_argument('--adj-size', type=int, default=80000000,
                           help='Size of adjacency matrix')
 
     # Train command
     train_parser = subparsers.add_parser('train', help='Train GNN model')
-    train_parser.add_argument('--dataset-folder', type=str, default='dataset/synthetic',
+    train_parser.add_argument('--dataset-folder', type=str, default='dataset/50M',
                             help='Folder containing the dataset')
-    train_parser.add_argument('--adj-size', type=int, default=1000000,
+    train_parser.add_argument('--adj-size', type=int, default=80000000,
                             help='Size of adjacency matrix')
-    train_parser.add_argument('--hidden', type=int, default=12,
+    train_parser.add_argument('--hidden', type=int, default=4,
                             help='Hidden layer size')
     train_parser.add_argument('--num-epoch', type=int, default=7,
                             help='Number of training epochs')
@@ -311,6 +352,12 @@ def setup_parser() -> argparse.ArgumentParser:
     cen_parser.add_argument('--script-path', type=str, default='dataset/cal_centrality.py', help='Path to cal_centrality.py')
     cen_parser.add_argument('--model-path', type=str, help='Path to the trained model (required for GNN centrality)')
     cen_parser.add_argument('--adj-size', type=int, default=4500000, help='Size of adjacency matrix (for GNN centrality)')
+
+    pre_adj_parser = subparsers.add_parser('pre_adj', help='Prepare adjacency matrix for inference')
+    pre_adj_parser.add_argument('--graph-path', type=str, required=True,
+                               help='Path to the input graph file')
+    pre_adj_parser.add_argument('--adj-size', type=int, default=60000000,
+                               help='Size of adjacency matrix')
 
     return parser
 
@@ -454,6 +501,11 @@ def main():
             force=args.force,
             python_path=args.python_path,
             script_path=args.script_path
+        )
+    elif args.command == 'pre_adj':
+        prepare_graph_for_inference(
+            graph_path=args.graph_path,
+            adj_size=args.adj_size
         )
     else:
         parser.print_help()
