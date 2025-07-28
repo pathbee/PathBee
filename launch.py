@@ -127,7 +127,7 @@ def train_gnn(
     print(f"Total Number of epochs: {num_epoch}")
     model = GNN_Bet(ninput=adj_size, nhid=hidden, dropout=0.6)
     model.to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.005, momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     loss = float('inf')
 
     for e in range(num_epoch):
@@ -316,7 +316,7 @@ def setup_parser() -> argparse.ArgumentParser:
                             help='Folder containing the dataset')
     train_parser.add_argument('--adj-size', type=int, default=80000000,
                             help='Size of adjacency matrix')
-    train_parser.add_argument('--hidden', type=int, default=4,
+    train_parser.add_argument('--hidden', type=int, default=8,
                             help='Hidden layer size')
     train_parser.add_argument('--num-epoch', type=int, default=7,
                             help='Number of training epochs')
