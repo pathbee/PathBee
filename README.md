@@ -72,19 +72,7 @@ python launch.py index --graph-path <graph_file> --centrality-path <centrality_f
 
 ## Performance
 
-### Baseline
-
-PathBee is a general framework that can be used with various 2-hop labeling algorithms. The central component shared among these algorithms is the pruned index construction procedure. This repository demonstrates the effectiveness and versatility of PathBee by applying it to the representative offline 2-hop labeling algorithm, PLL [1], within the pruned index construction procedure. For in-depth insights into PathBee's integration with different algorithms, please refer to our paper for detailed information.
-
-### Setup
-
-For experiments in a single-core CPU environment, we use a Linux server with AMD Ryzen 7 3700X (3.6 GHz) and 128 GB of main memory. For experiments in a multi-core CPU environment, we use a Linux server with Intel(R) Xeon(R) CPU E5-2696 v4 (2.2 GHz, 80 cores) and 128 GB of main memory. The cut-off time is set to 12 hours.
-
-### Effectiveness of PathBee on PLL
-
-We conducted a comparison of the index construction time, index size and query time between PLL, PathBee, and PathBee+ on 26 real-world datasets.
-
-The performance comparison result is shown as below.
+Below we show our main experimental results comparing PathBee, PathBee+, and PLL on 26 real-world datasets. More results and details can be found in our paper.
 
 #### Comparison on Index Construction Time
 
@@ -98,31 +86,8 @@ The performance comparison result is shown as below.
 
 <div align=center><img alt="pll_IT"src="assets\pll_QT.png"/></div>
 
-### Scalability of PathBee
-
-In the experiment for scalability validation, we randomly divide vertices of a graph into 5 equally sized vertex groups and create 5 graphs for the cases of 20%, 40%, 60%, 80%, 100%: the 𝑖-th graph is the induced subgraph on the first 𝑖-th vertex group.
-
-The scalability validation result is shown as below.
-
-#### Scalability Tests
-
-<div align=center><img alt="sca_IBT"src="assets\sca-PAT.png"/></div>
-
-<div align=center><img alt="sca_IS"src="assets\sca-IMDB.png"/></div>
-
-### Traversal Cost Model Validation
-
-The extra traversal cost model validation result (section 4 in our paper) is shown as below.
-
-<div align="center">
-  <img alt="sca_IBT" src="assets\model-EPI.png" width="340"/>
-  <img alt="sca_IBT" src="assets\model-MOC.png" width="340"/>
-</div>
-
-<div align="center">
-  <img alt="sca_IBT" src="assets\model-GN.png" width="340"/>
-  <img alt="sca_IBT" src="assets\model-SLA.png" width="347"/>
-</div>
+## NP-hard Prove
+The proof of NP-hardness can be found in [assets/PathBee_NP_Hard_Proof.pdf](assets/PathBee_NP_Hard_Proof.pdf).
 
 ## References
 
