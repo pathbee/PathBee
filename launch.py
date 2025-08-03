@@ -11,6 +11,22 @@ import subprocess
 
 logger = get_logger()
 
+def run_with_realtime_and_capture(cmd):
+    """Run command with real-time output display and capture output for parsing."""
+    import subprocess
+    
+    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    output_lines = []
+    
+    # Read output line by line in real-time
+    for line in process.stdout:
+        print(line, end='')  # Show progress immediately 
+        output_lines.append(line)  # Also capture for parsing
+    
+    process.wait()
+    full_output = ''.join(output_lines)
+    return full_output
+
 def get_device():
     """Get the appropriate device for the current system."""
     if torch.backends.mps.is_available():
@@ -194,26 +210,25 @@ def run_2_hop_labeling(
     print(f"Starting index construction for {os.path.basename(index_path)}...")
     
     cmd = f"./2_hop_labeling construct {graph_path} {centrality_path} {index_path}"
-    result = parallel_process([cmd], num_processes)
+    
+    # NEW: Real-time output + capture
+    full_output = run_with_realtime_and_capture(cmd)
     
     # Record end time
     end_time = time.time()
-    indexing_time = end_time - start_time
+    wall_clock_time = end_time - start_time
     
     # Extract statistics from the output
     index_size = 0
-    if result and len(result) > 0:
-        output = result[0] if isinstance(result, list) else str(result)
-        # Parse the statistics from the output
-        # Expected format: "index building time:X.XXXXXXs, index size:X.XXXXXXMB"
-        import re
-        time_match = re.search(r'index building time:([\d.]+)s', output)
-        size_match = re.search(r'index size:([\d.]+)MB', output)
-        
-        if time_match:
-            indexing_time = float(time_match.group(1))
-        if size_match:
-            index_size = float(size_match.group(1))
+    # Parse the statistics from the captured output
+    # Expected format: "index building time:X.XXXXXXs, index size:X.XXXXXXMB"
+    import re
+    time_match = re.search(r'index building time:([\d.]+)s', full_output)
+    size_match = re.search(r'index size:([\d.]+)MB', full_output)
+    
+    # Use parsed time if available, otherwise use wall-clock time
+    indexing_time = float(time_match.group(1)) if time_match else wall_clock_time
+    index_size = float(size_match.group(1)) if size_match else 0
     
     # Get file size if index file exists
     if os.path.exists(index_path):

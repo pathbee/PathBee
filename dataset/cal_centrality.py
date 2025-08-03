@@ -25,6 +25,7 @@ def read_graph(map_path: str) -> Tuple[nx.DiGraph, nk.Graph]:
         raise FileNotFoundError(f"Graph file not found: {map_path}")
         
     g_nx = nx.DiGraph()
+    is_weighted = False
     try:
         with open(map_path, 'r') as f:
             for line in f:
@@ -35,6 +36,7 @@ def read_graph(map_path: str) -> Tuple[nx.DiGraph, nk.Graph]:
                     if len(parts) >= 3:
                         weight = float(parts[2])
                         g_nx.add_edge(src, dest, weight=weight)
+                        is_weighted = True
                     else:
                         g_nx.add_edge(src, dest)
     except Exception as e:
@@ -42,6 +44,7 @@ def read_graph(map_path: str) -> Tuple[nx.DiGraph, nk.Graph]:
         
     g_nk = nx2nkit(g_nx)
     print(f"Map {map_path} has {g_nx.number_of_nodes()} nodes and {g_nx.number_of_edges()} edges.")
+    print(f"Weighted: {'Yes' if is_weighted else 'No'}")
     return g_nx, g_nk
 
 # Converts a NetworkX graph to a NetworKit graph

@@ -29,7 +29,7 @@ def main():
         graph_base = os.path.splitext(graph_name)[0]  # Remove .txt extension
 
         # 1. Calculate centrality (dc)
-        run_cmd(f"python launch.py cen --graph-path {graph_path} --centrality dc")
+        # run_cmd(f"python launch.py cen --graph-path {graph_path} --centrality dc")
 
         # # # 2. Inference
         # run_cmd(f"python launch.py cen --graph-path {graph_path} --centrality gnn_pb --model-path model/model_pb.pt --adj-size 4500000")

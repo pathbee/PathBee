@@ -2,6 +2,10 @@
 *.pickle
 *.log
 __pycache__
+
+*.mtx
+*.edges
+*.edgelist
 *.txt
 # *.ipynb
 .vscode
@@ -12,3 +16,4 @@ __pycache__
 !requirements.txt
 tmp.*
 *.sh
+2_hop_labeling
