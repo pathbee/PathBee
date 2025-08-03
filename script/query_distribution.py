@@ -53,14 +53,21 @@ def get_index_counts(index_path, vertices):
     
     return counts
 
-def run_queries(index_paths, query_pairs, result_dir=None, stratified=False):
+def run_queries(index_paths, query_pairs, result_dir=None, stratified=False, uniform=False):
     """
     Run queries for multiple index files, saving results in result_dir with CSV named after each index file.
     Uses query_distance mode for efficiency.
     """
     results_all = []
+    
+    # Set default result directory if None
+    if result_dir is None:
+        result_dir = 'result'
+    
     if stratified:
         result_dir = os.path.join(result_dir, 'stratified_sampling')
+    elif uniform:
+        result_dir = os.path.join(result_dir, 'uniform_sampling')
     else:
         result_dir = os.path.join(result_dir, 'random_sampling')
     for index_path in index_paths:
@@ -134,33 +141,102 @@ def run_queries(index_paths, query_pairs, result_dir=None, stratified=False):
         results_all.append(results)
     return results_all
 
-def generate_query_csv(index_paths, graph_path, num_queries=100000, seed=42, result_dir=None, stratified=False):
+def generate_query_pairs(num_vertices, num_queries, stratified, uniform, index_path=None):
     """
-    Generate CSVs of query results for queries for multiple index files.
+    Generate query pairs based on the specified sampling strategy.
     Args:
-        index_paths: List of paths to index files
-        graph_path: Path to the graph file
+        num_vertices: Number of vertices in the graph
         num_queries: Number of queries to generate
-        seed: Random seed for reproducibility
-        result_dir: Directory to save results
-        stratified: If True, use stratified sampling based on index item counts. If False, use random sampling.
+        stratified: If True, use stratified sampling
+        uniform: If True, use uniform sampling
+        index_path: Path to index file (required for stratified/uniform sampling)
+    Returns:
+        List of query pairs (v, w)
     """
-    num_vertices = get_num_vertices(graph_path)
-    print(f"Number of vertices in graph: {num_vertices}")
-
-    # Set random seed
-    random.seed(seed)
-    np.random.seed(seed)
-
-    if not stratified:
-        print("Using random sampling")
-        query_pairs = [(random.randint(0, num_vertices - 1), random.randint(0, num_vertices - 1))
-                      for _ in range(num_queries)]
-    else:
-        print("Using stratified sampling")
-        # First get index counts for all vertices
+    if uniform:
+        print("Using uniform sampling across bins")
+        # Get index counts for all vertices
         all_vertices = list(range(num_vertices))
-        index_counts = get_index_counts(index_paths[0], all_vertices)  # Use first index file for binning
+        index_counts = get_index_counts(index_path, all_vertices)
+        
+        # Create bins based on in/out index item counts
+        in_counts = [counts[0] for counts in index_counts.values()]
+        out_counts = [counts[1] for counts in index_counts.values()]
+        
+        # Find min and max for binning (matching C++ approach)
+        min_in = min(in_counts)
+        max_in = max(in_counts)
+        min_out = min(out_counts)
+        max_out = max(out_counts)
+        
+        # Create separate in-bins and out-bins (range-based binning)
+        in_bin_vertices = {i: [] for i in range(1, 11)}
+        out_bin_vertices = {i: [] for i in range(1, 11)}
+        
+        # Assign vertices to in-bins and out-bins using range-based binning
+        for v in range(len(in_counts)):
+            in_size = in_counts[v]
+            out_size = out_counts[v]
+            
+            # Calculate bin indices using the same formula as C++ code
+            in_bin_idx = min((in_size - min_in) * 10 // (max_in - min_in + 1), 9)
+            out_bin_idx = min((out_size - min_out) * 10 // (max_out - min_out + 1), 9)
+            
+            # Convert to 1-based indexing
+            in_bin_vertices[in_bin_idx + 1].append(v)
+            out_bin_vertices[out_bin_idx + 1].append(v)
+        
+        print(f"\nIndex item count ranges:")
+        print(f"In-count range: {min_in} to {max_in}")
+        print(f"Out-count range: {min_out} to {max_out}")
+        
+        print(f"\nBin vertex counts:")
+        for i in range(1, 11):
+            print(f"Bin {i}: {len(in_bin_vertices[i])} in-vertices, {len(out_bin_vertices[i])} out-vertices")
+        
+        # Generate query pairs by randomly selecting bins for source and destination
+        query_pairs = []
+        bin_usage = {i: 0 for i in range(1, 11)}
+        fallback_count = 0
+        
+        for _ in range(num_queries):
+            # Randomly select which bins to use for source and destination
+            source_bin = random.randint(1, 10)
+            dest_bin = random.randint(1, 10)
+            
+            # Track bin usage
+            bin_usage[source_bin] += 1
+            bin_usage[dest_bin] += 1
+            
+            # Get vertices from the selected bins
+            source_vertices = out_bin_vertices[source_bin]
+            dest_vertices = in_bin_vertices[dest_bin]
+            
+            # Skip if bins are empty and fall back to random sampling (following C++ implementation)
+            if not source_vertices or not dest_vertices:
+                # Fall back to random sampling for this query
+                v = random.randint(0, num_vertices - 1)
+                w = random.randint(0, num_vertices - 1)
+                fallback_count += 1
+            else:
+                # Randomly sample one vertex from each bin
+                v = random.choice(source_vertices)
+                w = random.choice(dest_vertices)
+            
+            query_pairs.append((v, w))
+        
+        print(f"\nUniform sampling statistics:")
+        print(f"Total queries generated: {len(query_pairs)}")
+        print(f"Fallback to random sampling: {fallback_count} queries")
+        print(f"Bin usage distribution (source + destination):")
+        for bin_idx in range(1, 11):
+            print(f"  Bin {bin_idx}: {bin_usage[bin_idx]} queries")
+        
+    elif stratified:
+        print("Using stratified sampling")
+        # Get index counts for all vertices
+        all_vertices = list(range(num_vertices))
+        index_counts = get_index_counts(index_path, all_vertices)
         
         # Create bins based on in/out index item counts
         in_counts = [counts[0] for counts in index_counts.values()]
@@ -211,18 +287,68 @@ def generate_query_csv(index_paths, graph_path, num_queries=100000, seed=42, res
             v = random.randint(0, num_vertices - 1)
             w = random.randint(0, num_vertices - 1)
             query_pairs.append((v, w))
+    
+    else:
+        print("Using random sampling")
+        query_pairs = [(random.randint(0, num_vertices - 1), random.randint(0, num_vertices - 1))
+                      for _ in range(num_queries)]
+    
+    return query_pairs
 
-    run_queries(index_paths, query_pairs, result_dir=result_dir, stratified=stratified)
+def generate_query_csv(index_paths, graph_path, num_queries=100000, seed=42, result_dir=None, stratified=False, uniform=False, same_queries=False):
+    """
+    Generate CSVs of query results for queries for multiple index files.
+    Args:
+        index_paths: List of paths to index files
+        graph_path: Path to the graph file
+        num_queries: Number of queries to generate
+        seed: Random seed for reproducibility
+        result_dir: Directory to save results
+        stratified: If True, use stratified sampling based on index item counts. If False, use random sampling.
+        uniform: If True, use uniform sampling across bins based on index item counts.
+        same_queries: If True, use the same query pairs for all index files. If False, generate separate pairs for each index file.
+    """
+    num_vertices = get_num_vertices(graph_path)
+    print(f"Number of vertices in graph: {num_vertices}")
 
-def plot_query_time_distribution(result_dir, stratified=False):
+    # Set random seed
+    random.seed(seed)
+    np.random.seed(seed)
+
+    # Validate that only one sampling strategy is selected
+    sampling_strategies = [stratified, uniform]
+    if sum(sampling_strategies) > 1:
+        raise ValueError("Only one sampling strategy can be selected at a time. Choose either --stratified, --uniform, or neither (for random sampling).")
+
+    if same_queries:
+        # Generate query pairs once and use for all index files
+        print("Using same query pairs for all index files")
+        query_pairs = generate_query_pairs(num_vertices, num_queries, stratified, uniform, index_paths[0] if uniform or stratified else None)
+        run_queries(index_paths, query_pairs, result_dir=result_dir, stratified=stratified, uniform=uniform)
+    else:
+        # Generate separate query pairs for each index file
+        print("Generating separate query pairs for each index file")
+        for i, index_path in enumerate(index_paths):
+            print(f"\nProcessing index file {i+1}/{len(index_paths)}: {index_path}")
+            query_pairs = generate_query_pairs(num_vertices, num_queries, stratified, uniform, index_path)
+            run_queries([index_path], query_pairs, result_dir=result_dir, stratified=stratified, uniform=uniform)
+
+def plot_query_time_distribution(result_dir, stratified=False, uniform=False):
     """
     Plot the query time distribution from all CSV files in result_dir.
     Args:
         result_dir (str): Directory containing the CSV files.
         stratified (bool): Whether to use stratified sampling directory.
+        uniform (bool): Whether to use uniform sampling directory.
     """
+    # Set default result directory if None
+    if result_dir is None:
+        result_dir = 'result'
+    
     if stratified:
         result_dir = os.path.join(result_dir, 'stratified_sampling')
+    elif uniform:
+        result_dir = os.path.join(result_dir, 'uniform_sampling')
     else:
         result_dir = os.path.join(result_dir, 'random_sampling')
     csv_paths = [os.path.join(result_dir, f) for f in os.listdir(result_dir) if f.endswith('.csv')]
@@ -258,10 +384,12 @@ def main():
     parser.add_argument('--num_queries', type=int, default=100000, help='Number of random queries to perform')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--result_dir', type=str, default=None, help='Path to save the CSV files')
-    parser.add_argument('--stratified', type=bool, default=False, help='Whether to use stratified sampling')
+    parser.add_argument('--stratified', action='store_true', help='Whether to use stratified sampling')
+    parser.add_argument('--uniform', action='store_true', help='Whether to use uniform sampling across bins')
+    parser.add_argument('--same_queries', action='store_true', help='Use same query pairs for all index files (default: separate pairs for each index)')
     args = parser.parse_args()
 
-    generate_query_csv(args.index_path, args.graph_path, args.num_queries, args.seed, args.result_dir, args.stratified)
+    generate_query_csv(args.index_path, args.graph_path, args.num_queries, args.seed, args.result_dir, args.stratified, args.uniform, args.same_queries)
 
 if __name__ == "__main__":
     main()

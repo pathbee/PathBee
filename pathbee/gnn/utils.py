@@ -54,13 +54,14 @@ def get_file_without_extension_name(full_path):
 def nx2nkit(g_nx):
     
     node_num = g_nx.number_of_nodes()
-    g_nkit = Graph(directed=True)
+    g_nkit = Graph(directed=True, weighted=True)
     
     for i in range(node_num):
         g_nkit.addNode()
     
-    for e1,e2 in g_nx.edges():
-        g_nkit.addEdge(e1,e2)
+    for e1, e2, data in g_nx.edges(data=True):
+        weight = data.get('weight', 1.0)  # Default weight is 1.0 for unweighted edges
+        g_nkit.addEdge(e1, e2, weight)
         
     assert g_nx.number_of_nodes()==g_nkit.numberOfNodes(),"Number of nodes not matching"
     assert g_nx.number_of_edges()==g_nkit.numberOfEdges(),"Number of edges not matching"
@@ -117,8 +118,15 @@ def read_graph(map_path):
     data = f.readlines()
     f.close()
     for idx, lines in enumerate(data):
-        src, dest = lines.split(" ")
-        G.add_edge(int(src), int(dest))
+        parts = lines.strip().split()
+        if len(parts) >= 2:
+            src, dest = parts[0], parts[1]
+            # Handle weighted graphs - if 3 parts, use weight; otherwise unweighted
+            if len(parts) >= 3:
+                weight = float(parts[2])
+                G.add_edge(int(src), int(dest), weight=weight)
+            else:
+                G.add_edge(int(src), int(dest))
 
     print(f"map {map_path} has {len(G.nodes())} nodes and {len(G.edges())} edges.")
     return G
@@ -175,16 +183,18 @@ def graph_to_adj_bet(list_graph,list_n_sequence,list_node_num,model_size):
     for i in range(len(list_graph)):
         print(f"Processing graphs: {i+1}/{len(list_graph)}",end='\r', flush=True)
         graph = list_graph[i]
-        edges = list(graph.edges())
+        # Preserve edge weights when recreating the graph
+        edges_with_data = list(graph.edges(data=True))
         graph = nx.MultiDiGraph()
-        graph.add_edges_from(edges)
+        graph.add_edges_from(edges_with_data)
 
         #self_loops = [i for i in graph.selfloop_edges()]
         self_loops = list(nx.selfloop_edges(graph))
         graph.remove_edges_from(self_loops)
         node_sequence = list_n_sequence[i]
 
-        adj_temp = nx.adjacency_matrix(graph,nodelist=node_sequence)
+        # Create weighted adjacency matrix
+        adj_temp = nx.adjacency_matrix(graph, nodelist=node_sequence, weight='weight')
 
         node_num = list_node_num[i]
         
@@ -199,7 +209,12 @@ def graph_to_adj_bet(list_graph,list_n_sequence,list_node_num,model_size):
 
         arr_multi = np.multiply(arr_temp1,arr_temp2)
         
-        arr_multi = np.where(arr_multi>0,1.0,0.0)
+        # For weighted graphs, we don't force binary values - keep the actual weights
+        # Only convert to binary if the graph is actually unweighted
+        # Check if any edge has a weight attribute in the data dictionary
+        has_weights = any('weight' in data for _, _, data in graph.edges(data=True))
+        if not has_weights:
+            arr_multi = np.where(arr_multi>0,1.0,0.0)
         
         degree_arr = arr_multi
         
@@ -303,15 +318,17 @@ def graph_to_adj_close(list_graph,list_n_sequence,list_node_num,model_size,print
     for i in range(len(list_graph)):
         print(f"Processing graphs: {i+1}/{len(list_graph)}",end='\r')
         graph = list_graph[i]
-        edges = list(graph.edges())
+        # Preserve edge weights when recreating the graph
+        edges_with_data = list(graph.edges(data=True))
         graph = nx.MultiDiGraph()
-        graph.add_edges_from(edges)
+        graph.add_edges_from(edges_with_data)
 
         self_loops = list(nx.selfloop_edges(graph))
         graph.remove_edges_from(self_loops)
         node_sequence = list_n_sequence[i]
 
-        adj_temp = nx.adjacency_matrix(graph,nodelist=node_sequence)
+        # Create weighted adjacency matrix
+        adj_temp = nx.adjacency_matrix(graph, nodelist=node_sequence, weight='weight')
 
         node_num = list_node_num[i]
         
@@ -323,7 +340,12 @@ def graph_to_adj_close(list_graph,list_n_sequence,list_node_num,model_size,print
 
         arr_multi = np.multiply(arr_temp1,arr_temp2)
         
-        arr_multi = np.where(arr_multi>0,1.0,0.0)
+        # For weighted graphs, we don't force binary values - keep the actual weights
+        # Only convert to binary if the graph is actually unweighted
+        # Check if any edge has a weight attribute in the data dictionary
+        has_weights = any('weight' in data for _, _, data in graph.edges(data=True))
+        if not has_weights:
+            arr_multi = np.where(arr_multi>0,1.0,0.0)
 
         
         degree_arr = arr_multi

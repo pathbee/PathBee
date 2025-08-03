@@ -245,6 +245,8 @@ def add_query_args(parser):
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--result-dir', type=str, default=None, help='Path to save the CSV files')
     parser.add_argument('--stratified', action='store_true', help='Use stratified sampling (default: random sampling)')
+    parser.add_argument('--uniform', action='store_true', help='Use uniform sampling across bins (default: random sampling)')
+    parser.add_argument('--same-queries', action='store_true', help='Use same query pairs for all index files (default: separate pairs for each index)')
 
 def setup_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='PathBee: Graph Neural Network for Path Queries')
@@ -437,12 +439,15 @@ def main():
             args.num_queries,
             args.seed,
             args.result_dir,
-            args.stratified
+            args.stratified,
+            args.uniform,
+            args.same_queries
         )
         from script.query_distribution import plot_query_time_distribution
         plot_query_time_distribution(
             result_dir=args.result_dir,
-            stratified=args.stratified
+            stratified=args.stratified,
+            uniform=args.uniform
         )
 
     elif args.command == 'cen':
