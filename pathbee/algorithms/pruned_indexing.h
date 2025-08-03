@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <climits>
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -98,6 +99,9 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
 ::ConstructIndex(string map_path, string centrality_path) {
   Free();
 
+  std::cout << "=== Pruned Landmark Labeling Index Construction ===" << std::endl;
+  std::cout << "Phase 1: Loading graph and centrality data..." << std::flush;
+  
   time_load_ = -GetCurrentTimeSec();
 
   // read graph
@@ -123,6 +127,7 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
   }
 
   time_load_ += GetCurrentTimeSec();
+  std::cout << " Done! (" << V << " vertices, " << E << " edges)" << std::endl;
 
   // in
   inIndex = (inLabel*)memalign(64, V * sizeof(inLabel));
@@ -151,6 +156,7 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
   //
   // Order vertices by decreasing order of degree
   //
+  std::cout << "Phase 2: Ordering vertices by centrality..." << std::flush;
   time_indexing_ = -GetCurrentTimeSec();
   std::vector<int> inv(V);  // new label -> old label
   {
@@ -187,10 +193,12 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
     inEdges.swap(new_inEdges);
     outEdges.swap(new_outEdges);
   }
+  std::cout << " Done!" << std::endl;
 
   //
   // Bit-parallel labeling
   //
+  std::cout << "Phase 3: Bit-parallel labeling (" << kNumBitParallelRoots << " roots)..." << std::flush;
   std::vector<bool> in_usd(V, false);  // Used as root? (in new label)
   std::vector<bool> out_usd(V, false);
   {
@@ -366,10 +374,12 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
       }
     }
   }
+  std::cout << " Done!" << std::endl;
 
   //
   // Pruned labeling
   //
+  std::cout << "Phase 4: Pruned labeling (processing " << V << " vertices)..." << std::endl;
   {
     // Sentinel (V, INF8) is added to all the vertices
     std::vector<std::pair<std::vector<int>, std::vector<uint8_t> > >
@@ -382,8 +392,19 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
     std::vector<bool> vis(V);
     std::vector<int> que(V);
     std::vector<uint8_t> dst_r(V + 1, INF8);
+    
+    int progress_step = std::max(1, V / 100); // Show progress every 1% of vertices
+    
     for (int r = 0; r < V; ++r) {
       if (in_usd[r] && out_usd[r]) continue;
+      
+      // Show progress
+      if (r % progress_step == 0) {
+        double progress = (double)r / V * 100.0;
+        std::cout << "  Progress: " << std::fixed << std::setprecision(1) 
+                  << progress << "% (" << r << "/" << V << " vertices)" << std::endl;
+      }
+      
       // std::cout << r << std::endl;
       // in- backward
       {
@@ -536,6 +557,9 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
       }
       out_usd[r] = true;
     }
+    
+    std::cout << "  Progress: 100.0% (" << V << "/" << V << " vertices)" << std::endl;
+    std::cout << "Phase 4: Finalizing index structures..." << std::flush;
 
     for (int v = 0; v < V; ++v) {
       int k = tmp_in_idx[v].first.size();
@@ -576,8 +600,10 @@ bool PrunedLandmarkLabeling<kNumBitParallelRoots>
     }
     
   }
+  std::cout << " Done!" << std::endl;
 
   time_indexing_ += GetCurrentTimeSec();
+  std::cout << "=== Index Construction Complete ===" << std::endl;
   return true;
 }
 

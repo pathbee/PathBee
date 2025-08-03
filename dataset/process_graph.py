@@ -19,11 +19,41 @@ def process_graph(input_filepath: str):
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # First, count total lines for progress tracking
-    print("Counting lines in input file...")
+    # First, count total lines and find maximum vertex ID for progress tracking
+    print("Analyzing input file...")
+    max_vertex_id = -1
+    total_lines = 0
+    
+    # First pass: count total lines for progress bar
     with open(input_filepath, "r") as f:
         total_lines = sum(1 for line in f)
+    
+    # Second pass: analyze vertex IDs with progress bar
+    processed_lines = 0
+    with open(input_filepath, "r") as f:
+        for line in f:
+            processed_lines += 1
+            
+            # Show progress every 100,000 lines or every 1% of total lines
+            if processed_lines % max(100000, total_lines // 100) == 0:
+                progress = (processed_lines / total_lines) * 100
+                print(f"Analysis progress: {processed_lines:,}/{total_lines:,} lines ({progress:.1f}%)")
+            
+            # Skip empty lines and header lines (starting with # or %)
+            if not line.strip() or line.strip().startswith('#') or line.strip().startswith('%'):
+                continue
+            
+            # Split by both tab and space
+            parts = line.strip().replace('\t', ' ').split()
+            if len(parts) < 2:
+                continue
+                
+            # Get source and target vertex IDs
+            source, target = int(parts[0]), int(parts[1])
+            max_vertex_id = max(max_vertex_id, source, target)
+    
     print(f"Total lines in input file: {total_lines:,}")
+    print(f"Maximum vertex ID (number of vertices): {max_vertex_id + 1:,}")
 
     # Open input and output files
     input_file = open(input_filepath, "r")
