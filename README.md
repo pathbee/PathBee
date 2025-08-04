@@ -86,7 +86,7 @@ Below we show our main experimental results comparing PathBee, PathBee+, and PLL
 
 <div align=center><img alt="pll_IT"src="assets\pll_QT.png"/></div>
 
-## NP-hard Prove
+## NP-hard Proof
 The proof of NP-hardness can be found in [assets/PathBee_NP_Hard_Proof.pdf](assets/PathBee_NP_Hard_Proof.pdf).
 
 ## References
@@ -94,3 +94,4 @@ The proof of NP-hardness can be found in [assets/PathBee_NP_Hard_Proof.pdf](asse
 [1] [Pruned Landmark Labeling](https://github.com/iwiwi/pruned-landmark-labeling)
 [2] [Historical Pruned Landmark Labeling](https://github.com/iwiwi/historical-pruned-landmark-labeling)
 [3] [GNN-Bet](https://github.com/sunilkmaurya/GNN-Bet)
+
