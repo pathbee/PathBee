@@ -1,6 +1,6 @@
-# PathBee: A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms (SIGMOD 2026)
+# PathBee: A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms (ICDE 2026)
 
-This repository hosts the source code and supplementary materials for our SIGMOD 2026 paper, "A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms". This work presents PathBee, an innovative framework leveraging Graph Neural Networks (GNNs) that significantly advances the current 2-hop labeling-based approaches.
+This repository hosts the source code and supplementary materials for our ICDE 2026 paper submission, "A Generic, Plug-and-Play Optimization Framework for Distance Labeling Algorithms". This work presents PathBee, an innovative framework leveraging Graph Neural Networks (GNNs) that significantly advances the current 2-hop labeling-based approaches.
 
 ## PathBee Workflow
 
@@ -94,4 +94,5 @@ The proof of NP-hardness can be found in [assets/PathBee_NP_Hard_Proof.pdf](asse
 [1] [Pruned Landmark Labeling](https://github.com/iwiwi/pruned-landmark-labeling)
 [2] [Historical Pruned Landmark Labeling](https://github.com/iwiwi/historical-pruned-landmark-labeling)
 [3] [GNN-Bet](https://github.com/sunilkmaurya/GNN-Bet)
+
 
